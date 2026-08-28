@@ -151,9 +151,32 @@ construit d'un bloc :
    avec la mesure manuelle faite précédemment (~240,240,240) — et retrouve
    le même espacement de grille (23px) qu'avec la couleur donnée à la
    main.
-7. **Pas encore fait** : robustesse au bruit d'une vraie photo prise au
-   téléphone (éclairage variable, papier froissé, document qui ne se
-   détache pas clairement de son arrière-plan).
+8. **Testé sur un jeu d'images réelles externe (ecg-image-kit, BSD-3,
+   github.com/alphanumericslab/ecg-image-kit)** — pas des photos de
+   patient, mais un vrai jeu de recherche avec de vraies images
+   compressées/scannées, pas synthétiques. Deux enseignements :
+   - **Confirmé** : la disposition en grille varie dans la vraie vie
+     (3×4 avec bande de rythme, 6×2, etc.) — `segment_grid_panels`
+     accepte déjà `rows`/`cols` en paramètre, pas de changement
+     nécessaire, juste une confirmation qu'il ne faut jamais supposer
+     une disposition fixe sans la connaître.
+   - **Tentative de correctif abandonnée, documentée pour ne pas la
+     retenter** : un nom de dérivation imprimé dans le panneau ("aVR",
+     "V2"...) peut corrompre le tracé extrait juste à son emplacement (le
+     texte est aussi sombre que le tracé). Essayé : ne garder que les
+     composantes connexes assez larges pour être le vrai tracé — a
+     complètement cassé l'extraction sur les vraies images, car le vrai
+     tracé s'y fragmente en morceaux de taille comparable au texte
+     (compression JPEG, trait fin). Testé aussi une variante par
+     dimensions (largeur ET hauteur) : les fragments de tracé et les
+     lettres du texte ont des tailles trop proches sur ce jeu de données
+     pour être séparés de façon fiable. **Retiré** plutôt que de garder
+     un correctif qui casse plus qu'il ne répare — reste un problème
+     ouvert.
+9. **Pas encore fait** : le problème d'étiquette ci-dessus, et la
+   robustesse au bruit d'une vraie photo prise au téléphone (éclairage
+   variable, papier froissé, document qui ne se détache pas clairement de
+   son arrière-plan).
 
 **Hypothèses fortes à garder en tête** — la grille est supposée carrée
 (même espacement horizontal/vertical) et sa couleur doit être connue

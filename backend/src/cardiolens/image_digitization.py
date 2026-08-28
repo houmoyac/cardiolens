@@ -37,6 +37,14 @@ def extract_trace_from_image(
     doesn't distinguish a stationary decoy from the moving trace). Rows
     that are dark in almost every column are excluded before picking each
     column's trace position — the trace moves, a border/grid line doesn't.
+
+    KNOWN UNSOLVED ISSUE (see ARCHITECTURE.md): a lead label printed
+    inside the panel ("aVR", "V2", ...) can still corrupt the trace near
+    where it sits — a connected-component filter meant to drop small
+    label-sized blobs was tried and reverted, because on real (if
+    low-quality/compressed) images the genuine trace itself fragments into
+    pieces of a similar size to label text; the filter did more harm than
+    good. Not fixed here — a real gap, not a silent one.
     """
     if image.ndim == 3:
         gray = np.asarray(Image.fromarray(image).convert("L"), dtype=np.float64)

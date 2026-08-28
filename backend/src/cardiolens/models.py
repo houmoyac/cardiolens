@@ -43,5 +43,9 @@ class ECGMeasurements(BaseModel):
     thresholds yet. More reliable than Bazett outside a normal heart rate
     range; shown so the physician can judge, not to silently override Bazett."""
     rr_interval_ms: float
+    rr_variability_pct: float
+    """Coefficient of variation of RR intervals (%) — a coarse screening
+    signal for rhythm irregularity, not a diagnosis of any specific
+    arrhythmia."""
     electrical_axis_deg: float | None = None
     """None until multi-lead (I, aVF) input is wired in — never fabricate 0°."""

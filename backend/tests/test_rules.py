@@ -11,6 +11,7 @@ NORMAL = ECGMeasurements(
     qtc_ms=420,
     qtc_fridericia_ms=410,
     rr_interval_ms=800,
+    rr_variability_pct=3,
     electrical_axis_deg=30,
 )
 
@@ -51,6 +52,18 @@ def test_qtc_prolonged_uses_sex_specific_threshold() -> None:
     alerts_female = evaluate_rules(m, ESC_DEFAULT, sex="F")
     assert any(a.code == "qtc_prolonged" for a in alerts_male)
     assert not any(a.code == "qtc_prolonged" for a in alerts_female)
+
+
+def test_irregular_rhythm_detected_above_variability_threshold() -> None:
+    m = NORMAL.model_copy(update={"rr_variability_pct": 22})
+    alerts = evaluate_rules(m, ESC_DEFAULT)
+    assert any(a.code == "irregular_rhythm" for a in alerts)
+
+
+def test_regular_rhythm_not_flagged() -> None:
+    m = NORMAL.model_copy(update={"rr_variability_pct": 4})
+    alerts = evaluate_rules(m, ESC_DEFAULT)
+    assert not any(a.code == "irregular_rhythm" for a in alerts)
 
 
 def test_qtc_short_detected() -> None:

@@ -22,6 +22,7 @@ class GuidelineThresholds:
     qtc_long_male_ms: float = 450.0
     qtc_long_female_ms: float = 460.0
     qtc_short_ms: float = 340.0
+    rr_irregularity_cv_pct: float = 15.0
     axis_left_deg: float = -30.0
     axis_right_deg: float = 90.0
 
@@ -61,6 +62,21 @@ def evaluate_rules(
                 message=(
                     f"Tachycardie ({measurements.heart_rate_bpm:.0f} bpm, "
                     f"seuil > {thresholds.tachycardia_bpm:.0f} bpm)"
+                ),
+                source=AlertSource.RULE,
+                severity=AlertSeverity.WARNING,
+            )
+        )
+
+    if measurements.rr_variability_pct > thresholds.rr_irregularity_cv_pct:
+        alerts.append(
+            ClinicalAlert(
+                code="irregular_rhythm",
+                message=(
+                    f"Rythme irrégulier (variabilité RR de "
+                    f"{measurements.rr_variability_pct:.0f}%, seuil > "
+                    f"{thresholds.rr_irregularity_cv_pct:.0f}%) — à corréler cliniquement, "
+                    "fibrillation atriale à exclure"
                 ),
                 source=AlertSource.RULE,
                 severity=AlertSeverity.WARNING,

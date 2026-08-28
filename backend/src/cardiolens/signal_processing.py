@@ -42,6 +42,14 @@ def measure_ecg(signal: NDArray[np.float64], sampling_rate: int) -> ECGMeasureme
     mean_rr_ms = float(np.nanmean(rr_intervals_ms))
     heart_rate_bpm = 60_000.0 / mean_rr_ms
 
+    # Coefficient of variation of RR intervals — a coarse, well-established
+    # screening signal for rhythm irregularity (e.g. possible atrial
+    # fibrillation), computed from R-peaks alone so it doesn't depend on the
+    # noisier P/QRS/T delineation. Not a diagnosis: a flag to correlate.
+    rr_variability_pct = (
+        float(np.std(rr_intervals_ms) / mean_rr_ms * 100.0) if len(rr_intervals_ms) >= 3 else 0.0
+    )
+
     pr_interval_ms = _robust_interval_ms(
         waves, "ECG_P_Onsets", "ECG_Q_Peaks", sampling_rate, min_ms=80.0, max_ms=300.0
     )
@@ -69,6 +77,7 @@ def measure_ecg(signal: NDArray[np.float64], sampling_rate: int) -> ECGMeasureme
         qtc_ms=qtc_bazett_ms,
         qtc_fridericia_ms=qtc_fridericia_ms,
         rr_interval_ms=mean_rr_ms,
+        rr_variability_pct=rr_variability_pct,
     )
 
 

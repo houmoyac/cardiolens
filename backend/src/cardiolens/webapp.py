@@ -159,6 +159,7 @@ else:
             qtc_threshold = 460.0 if sex == "F" else 450.0
             qrs_warn = measurements.qrs_duration_ms > 120
             qtc_warn = measurements.qtc_ms > qtc_threshold
+            rr_var_warn = measurements.rr_variability_pct > ESC_DEFAULT.rr_irregularity_cv_pct
 
             def alert_html(alert: ClinicalAlert) -> str:
                 css = "warning" if alert.severity == AlertSeverity.WARNING else "info"
@@ -187,6 +188,9 @@ else:
                 '<div class="cl-chip">'
                 '<div class="cl-chip-label">QTc (Fridericia)</div>'
                 f'<div class="cl-chip-value">{measurements.qtc_fridericia_ms:.0f} ms</div></div>'
+                f'<div class="cl-chip{" warn" if rr_var_warn else ""}">'
+                '<div class="cl-chip-label">Variabilité RR</div>'
+                f'<div class="cl-chip-value">{measurements.rr_variability_pct:.0f}%</div></div>'
                 "</div>"
                 '<div class="cl-section-label">'
                 '<span class="cl-badge rule">RÈGLE</span>'

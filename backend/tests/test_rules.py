@@ -66,6 +66,28 @@ def test_regular_rhythm_not_flagged() -> None:
     assert not any(a.code == "irregular_rhythm" for a in alerts)
 
 
+def test_short_pr_and_wide_qrs_combine_into_wpw_pattern() -> None:
+    m = NORMAL.model_copy(update={"pr_interval_ms": 100, "qrs_duration_ms": 140})
+    alerts = evaluate_rules(m, ESC_DEFAULT)
+    assert any(a.code == "wpw_pattern" for a in alerts)
+    assert not any(a.code == "pr_short" for a in alerts)
+    assert not any(a.code == "qrs_wide" for a in alerts)
+
+
+def test_short_pr_alone_does_not_trigger_wpw_pattern() -> None:
+    m = NORMAL.model_copy(update={"pr_interval_ms": 100})
+    alerts = evaluate_rules(m, ESC_DEFAULT)
+    assert any(a.code == "pr_short" for a in alerts)
+    assert not any(a.code == "wpw_pattern" for a in alerts)
+
+
+def test_wide_qrs_alone_does_not_trigger_wpw_pattern() -> None:
+    m = NORMAL.model_copy(update={"qrs_duration_ms": 140})
+    alerts = evaluate_rules(m, ESC_DEFAULT)
+    assert any(a.code == "qrs_wide" for a in alerts)
+    assert not any(a.code == "wpw_pattern" for a in alerts)
+
+
 def test_qtc_short_detected() -> None:
     m = NORMAL.model_copy(update={"qtc_ms": 320})
     alerts = evaluate_rules(m, ESC_DEFAULT, sex="M")

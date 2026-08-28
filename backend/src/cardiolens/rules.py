@@ -83,43 +83,66 @@ def evaluate_rules(
             )
         )
 
-    if measurements.pr_interval_ms > thresholds.pr_long_ms:
-        alerts.append(
-            ClinicalAlert(
-                code="pr_prolonged",
-                message=(
-                    f"PR allongé ({measurements.pr_interval_ms:.0f} ms), "
-                    "évoquant un bloc AV du 1er degré"
-                ),
-                source=AlertSource.RULE,
-                severity=AlertSeverity.WARNING,
-            )
-        )
-    elif measurements.pr_interval_ms < thresholds.pr_short_ms:
-        alerts.append(
-            ClinicalAlert(
-                code="pr_short",
-                message=(
-                    f"PR court ({measurements.pr_interval_ms:.0f} ms), "
-                    "à corréler avec une pré-excitation"
-                ),
-                source=AlertSource.RULE,
-                severity=AlertSeverity.WARNING,
-            )
-        )
+    pr_short = measurements.pr_interval_ms < thresholds.pr_short_ms
+    pr_long = measurements.pr_interval_ms > thresholds.pr_long_ms
+    qrs_wide = measurements.qrs_duration_ms > thresholds.qrs_wide_ms
 
-    if measurements.qrs_duration_ms > thresholds.qrs_wide_ms:
+    if pr_short and qrs_wide:
+        # Short PR + wide QRS together is a more specific, more clinically
+        # useful signal than either alone — the classic pre-excitation
+        # (WPW) pattern — so report it as one finding, not two unrelated
+        # ones the physician has to mentally recombine themselves.
         alerts.append(
             ClinicalAlert(
-                code="qrs_wide",
+                code="wpw_pattern",
                 message=(
-                    f"QRS élargi ({measurements.qrs_duration_ms:.0f} ms), "
-                    "évoquant un bloc de branche"
+                    f"PR court ({measurements.pr_interval_ms:.0f} ms) associé à un QRS "
+                    f"élargi ({measurements.qrs_duration_ms:.0f} ms) — pattern évocateur "
+                    "d'une pré-excitation (syndrome de Wolff-Parkinson-White), à corréler "
+                    "avec la présence d'une onde delta"
                 ),
                 source=AlertSource.RULE,
                 severity=AlertSeverity.WARNING,
             )
         )
+    else:
+        if pr_long:
+            alerts.append(
+                ClinicalAlert(
+                    code="pr_prolonged",
+                    message=(
+                        f"PR allongé ({measurements.pr_interval_ms:.0f} ms), "
+                        "évoquant un bloc AV du 1er degré"
+                    ),
+                    source=AlertSource.RULE,
+                    severity=AlertSeverity.WARNING,
+                )
+            )
+        elif pr_short:
+            alerts.append(
+                ClinicalAlert(
+                    code="pr_short",
+                    message=(
+                        f"PR court ({measurements.pr_interval_ms:.0f} ms), "
+                        "à corréler avec une pré-excitation"
+                    ),
+                    source=AlertSource.RULE,
+                    severity=AlertSeverity.WARNING,
+                )
+            )
+
+        if qrs_wide:
+            alerts.append(
+                ClinicalAlert(
+                    code="qrs_wide",
+                    message=(
+                        f"QRS élargi ({measurements.qrs_duration_ms:.0f} ms), "
+                        "évoquant un bloc de branche"
+                    ),
+                    source=AlertSource.RULE,
+                    severity=AlertSeverity.WARNING,
+                )
+            )
 
     qtc_threshold = thresholds.qtc_long_female_ms if sex == "F" else thresholds.qtc_long_male_ms
     if measurements.qtc_ms > qtc_threshold:

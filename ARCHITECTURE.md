@@ -95,10 +95,21 @@ construit d'un bloc :
    (fond clair, trait sombre net) — `extract_trace_from_image` /
    `trace_to_signal`. Validé par un test qui dessine une courbe connue et
    vérifie que la forme récupérée corrèle à >0.9 avec l'originale.
-2. **Pas encore fait** : détection et retrait de la grille millimétrée,
-   calibration pixels → ms/mV, correction de perspective, segmentation des
-   12 dérivations sur une même page, robustesse au bruit d'une vraie photo
-   (éclairage, angle, papier froissé).
+2. **Fait** : détection de l'espacement du quadrillage millimétré (couleur
+   connue, grille carrée supposée) par autocorrélation, et calibration
+   pixels → ms/mV à partir de cet espacement + des standards papier ECG
+   (25 mm/s, 10 mm/mV) — `detect_grid_spacing_px` / `calibrate_trace`.
+   Validé sur une grille synthétique d'espacement connu (retrouvé à ±1px).
+3. **Pas encore fait** : correction de perspective (photo prise de biais),
+   segmentation des 12 dérivations sur une même page, robustesse au bruit
+   d'une vraie photo (éclairage variable, papier froissé, grille dont la
+   couleur réelle diffère de l'hypothèse `grid_rgb`).
+
+**Hypothèses fortes à garder en tête** — la grille est supposée carrée
+(même espacement horizontal/vertical) et sa couleur doit être connue
+d'avance (`grid_rgb`, un rose/rouge par défaut) ; aucune de ces deux
+hypothèses n'a encore été vérifiée sur une vraie photo, seulement sur du
+synthétique.
 
 **Ne pas brancher ce module sur le parcours "Scanner via photo" de l'app
 tant que l'étape 2 n'est pas faite** — aujourd'hui ce parcours mobile

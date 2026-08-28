@@ -11,7 +11,10 @@ import pytest
 from PIL import Image
 
 from cardiolens.image_digitization import (
+    GridDetectionError,
     TraceExtractionError,
+    calibrate_trace,
+    detect_grid_spacing_px,
     extract_trace_from_image,
     trace_to_signal,
 )
@@ -74,3 +77,48 @@ def test_trace_to_signal_fills_small_gaps() -> None:
     signal = trace_to_signal(pixel_trace)
     assert not np.any(np.isnan(signal))
     assert len(signal) == 5
+
+
+def _render_grid_image(
+    spacing_px: int = 20, width_px: int = 400, height_px: int = 300
+) -> np.ndarray:
+    image = np.full((height_px, width_px, 3), 255, dtype=np.uint8)
+    grid_color = (255, 150, 150)
+    for x in range(0, width_px, spacing_px):
+        image[:, x] = grid_color
+    for y in range(0, height_px, spacing_px):
+        image[y, :] = grid_color
+    return image
+
+
+def test_detect_grid_spacing_recovers_known_value() -> None:
+    known_spacing = 20
+    image = _render_grid_image(spacing_px=known_spacing)
+
+    detected = detect_grid_spacing_px(image)
+
+    assert abs(detected - known_spacing) <= 1
+
+
+def test_detect_grid_spacing_raises_when_no_grid_color_present() -> None:
+    blank = np.full((100, 100, 3), 255, dtype=np.uint8)
+    with pytest.raises(GridDetectionError):
+        detect_grid_spacing_px(blank)
+
+
+def test_calibrate_trace_produces_plausible_ecg_units() -> None:
+    # A synthetic trace spanning ~30px peak-to-peak, on a 20px grid spacing
+    # standing in for 5mm — roughly a 1.5mV swing, physiologically
+    # plausible for a QRS complex.
+    pixel_trace = np.array([0.0, 10.0, -30.0, 10.0, 0.0] * 20)
+
+    signal_mv, sampling_rate_hz = calibrate_trace(pixel_trace, grid_spacing_px=20.0)
+
+    assert 0.1 <= np.ptp(signal_mv) <= 5.0
+    # 20px per 5mm at 25mm/s -> 100px/s sampling rate.
+    assert sampling_rate_hz == pytest.approx(100.0)
+
+
+def test_calibrate_trace_rejects_non_positive_spacing() -> None:
+    with pytest.raises(GridDetectionError):
+        calibrate_trace(np.array([1.0, 2.0]), grid_spacing_px=0.0)

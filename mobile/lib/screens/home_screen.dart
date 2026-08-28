@@ -42,7 +42,7 @@ class HomeScreen extends StatelessWidget {
               PopupMenuItem<_AccountAction>(
                 enabled: false,
                 child: Text(
-                  AuthService.instance.currentUser?.fullName ?? '',
+                  AuthService.instance.currentUser?.displayName ?? '',
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     color: CardioLensColors.textPrimary,

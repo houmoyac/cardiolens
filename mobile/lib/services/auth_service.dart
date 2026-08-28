@@ -69,11 +69,17 @@ class AuthService {
 
   Future<void> register({
     required String email,
-    required String fullName,
+    required String firstName,
+    required String lastName,
     required String password,
   }) async {
     final client = ApiClient(baseUrl: apiBaseUrl);
-    await client.register(email: email, fullName: fullName, password: password);
+    await client.register(
+      email: email,
+      firstName: firstName,
+      lastName: lastName,
+      password: password,
+    );
     await login(email: email, password: password);
   }
 

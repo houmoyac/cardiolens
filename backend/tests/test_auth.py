@@ -46,7 +46,12 @@ def client() -> TestClient:
 def _register(client: TestClient, email: str = "dr.test@example.com") -> dict:
     response = client.post(
         "/auth/register",
-        json={"email": email, "full_name": "Dr. Test", "password": "correct-horse-battery"},
+        json={
+            "email": email,
+            "first_name": "Test",
+            "last_name": "Dupont",
+            "password": "correct-horse-battery",
+        },
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -55,7 +60,8 @@ def _register(client: TestClient, email: str = "dr.test@example.com") -> dict:
 def test_register_creates_a_user(client: TestClient) -> None:
     body = _register(client)
     assert body["email"] == "dr.test@example.com"
-    assert body["full_name"] == "Dr. Test"
+    assert body["first_name"] == "Test"
+    assert body["last_name"] == "Dupont"
     assert "password" not in body
     assert "hashed_password" not in body
 
@@ -64,7 +70,12 @@ def test_register_rejects_duplicate_email(client: TestClient) -> None:
     _register(client)
     response = client.post(
         "/auth/register",
-        json={"email": "dr.test@example.com", "full_name": "Dr. Other", "password": "whatever123"},
+        json={
+            "email": "dr.test@example.com",
+            "first_name": "Other",
+            "last_name": "Martin",
+            "password": "whatever123",
+        },
     )
     assert response.status_code == 409
 

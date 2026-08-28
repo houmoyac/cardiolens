@@ -19,7 +19,8 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  final _fullNameController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _isRegisterMode = false;
@@ -29,7 +30,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     _emailController.dispose();
-    _fullNameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -45,7 +47,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (_isRegisterMode) {
         await AuthService.instance.register(
           email: _emailController.text.trim(),
-          fullName: _fullNameController.text.trim(),
+          firstName: _firstNameController.text.trim(),
+          lastName: _lastNameController.text.trim(),
           password: _passwordController.text,
         );
       } else {
@@ -79,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Center(child: Image.asset('assets/logo.png', height: 64)),
+                  Center(child: Image.asset('assets/logo_transparent.png', height: 64)),
                   const SizedBox(height: 12),
                   const Text(
                     'CardioLens',
@@ -104,11 +107,23 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 28),
                   if (_isRegisterMode) ...[
                     TextFormField(
-                      controller: _fullNameController,
+                      controller: _firstNameController,
                       textCapitalization: TextCapitalization.words,
                       decoration: const InputDecoration(
-                        labelText: 'Nom complet',
-                        hintText: 'ex : Dr. Amina Belkacem',
+                        labelText: 'Prénom',
+                        hintText: 'ex : Amina',
+                      ),
+                      validator: (value) => (value == null || value.trim().isEmpty)
+                          ? 'Requis'
+                          : null,
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _lastNameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Nom',
+                        hintText: 'ex : Belkacem',
                       ),
                       validator: (value) => (value == null || value.trim().isEmpty)
                           ? 'Requis'

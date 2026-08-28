@@ -188,7 +188,7 @@ class ReportScreen extends StatelessWidget {
   String _validatorLabel() {
     final doctor = AuthService.instance.currentUser;
     if (doctor == null) return '[Dr. Nom Prénom] — en attente de validation';
-    return '${doctor.fullName} — en attente de validation';
+    return '${doctor.displayName} — en attente de validation';
   }
 
   void _showTodoSnack(BuildContext context) {

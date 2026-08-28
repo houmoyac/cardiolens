@@ -24,19 +24,33 @@ class ApiException implements Exception {
 class AuthTokenInvalidException implements Exception {}
 
 class AuthUser {
-  const AuthUser({required this.id, required this.email, required this.fullName});
+  const AuthUser({
+    required this.id,
+    required this.email,
+    required this.firstName,
+    required this.lastName,
+  });
 
   final int id;
   final String email;
-  final String fullName;
+  final String firstName;
+  final String lastName;
+
+  String get displayName => '$firstName $lastName';
 
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
     id: json['id'] as int,
     email: json['email'] as String,
-    fullName: json['full_name'] as String,
+    firstName: json['first_name'] as String,
+    lastName: json['last_name'] as String,
   );
 
-  Map<String, dynamic> toJson() => {'id': id, 'email': email, 'full_name': fullName};
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'email': email,
+    'first_name': firstName,
+    'last_name': lastName,
+  };
 }
 
 class AuthSession {
@@ -108,7 +122,8 @@ class ApiClient {
 
   Future<AuthUser> register({
     required String email,
-    required String fullName,
+    required String firstName,
+    required String lastName,
     required String password,
   }) async {
     final http.Response response;
@@ -119,7 +134,8 @@ class ApiClient {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'email': email,
-              'full_name': fullName,
+              'first_name': firstName,
+              'last_name': lastName,
               'password': password,
             }),
           )

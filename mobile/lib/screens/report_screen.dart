@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/ecg_result.dart';
 import '../theme.dart';
+import '../widgets/ecg_metadata_bar.dart';
 import '../widgets/ecg_trace_painter.dart';
 
 class ReportScreen extends StatelessWidget {
@@ -91,12 +92,14 @@ class ReportScreen extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${ecgCase.dateLabel} · Dérivation DII',
+                    ecgCase.dateLabel,
                     style: const TextStyle(
                       fontSize: 12,
                       color: CardioLensColors.textSecondary,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  EcgMetadataBar(ecgCase: ecgCase),
                   const SizedBox(height: 16),
                   const EcgTracePainter(height: 70),
                   const Divider(height: 28),

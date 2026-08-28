@@ -51,6 +51,10 @@ class EcgCase {
     required this.dateLabel,
     required this.measurements,
     required this.alerts,
+    this.sourceLabel = 'PTB-XL (dataset public)',
+    this.leadLabel = 'Dérivation DII',
+    this.samplingRateHz = 500,
+    this.powerlineFilterHz = 50,
   });
 
   final String id;
@@ -58,6 +62,15 @@ class EcgCase {
   final String dateLabel;
   final EcgMeasurements measurements;
   final List<ClinicalAlert> alerts;
+
+  /// Provenance shown to the physician so they know what they're looking
+  /// at — never invented per-case, just the real, current pipeline
+  /// defaults (single lead, 500 Hz, NeuroKit2's default 50 Hz mains-hum
+  /// filter — see backend ARCHITECTURE.md on why it's mono-lead for now).
+  final String sourceLabel;
+  final String leadLabel;
+  final int samplingRateHz;
+  final int powerlineFilterHz;
 
   bool get hasWarning => alerts.any((a) => a.severity == AlertSeverity.warning);
 

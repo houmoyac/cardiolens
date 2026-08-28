@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/ecg_result.dart';
 import '../theme.dart';
+import '../widgets/ecg_metadata_bar.dart';
 import '../widgets/ecg_trace_painter.dart';
 import 'report_screen.dart';
 
@@ -23,12 +24,14 @@ class ResultsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
+          EcgMetadataBar(ecgCase: ecgCase),
+          const SizedBox(height: 12),
           Card(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
               child: Column(
                 children: [
-                  const EcgTracePainter(),
+                  const EcgTracePainter(showControls: true, height: 100),
                   const SizedBox(height: 4),
                   const Align(
                     alignment: Alignment.centerRight,

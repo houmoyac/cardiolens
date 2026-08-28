@@ -7,6 +7,7 @@ import numpy as np
 import streamlit as st
 from matplotlib.figure import Figure
 
+from cardiolens.io_utils import load_signal_from_csv
 from cardiolens.models import AlertSeverity, AlertSource, ClinicalAlert
 from cardiolens.rules import ESC_DEFAULT, evaluate_rules
 from cardiolens.signal_processing import ECGProcessingError, measure_ecg
@@ -128,16 +129,19 @@ sampling_rate = SAMPLE_SAMPLING_RATE
 
 if source == "Cas réel (PTB-XL)":
     case_name = st.selectbox("Cas de démonstration", list(SAMPLE_CASES))
-    signal = np.loadtxt(SAMPLE_CASES[case_name], delimiter=",").ravel()
+    signal = load_signal_from_csv(SAMPLE_CASES[case_name].read_text())
     st.caption(
         "Enregistrement réel, anonymisé, issu du dataset public PTB-XL — dérivation DII, 500 Hz. "
         "Aucune donnée patient de ton ami n'est utilisée ici."
     )
 else:
     sampling_rate = st.number_input("Fréquence d'échantillonnage (Hz)", value=500, min_value=50)
-    uploaded = st.file_uploader("Fichier CSV (une valeur de signal par ligne)")
+    uploaded = st.file_uploader("Fichier CSV (avec ou sans en-tête, 1 ou 2 colonnes)")
     if uploaded is not None:
-        signal = np.loadtxt(uploaded, delimiter=",").ravel()
+        try:
+            signal = load_signal_from_csv(uploaded)
+        except ValueError as exc:
+            st.error(f"Fichier illisible : {exc}")
 
 if signal is not None:
     st.pyplot(plot_ecg_trace(signal, int(sampling_rate)), clear_figure=True)

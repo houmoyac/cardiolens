@@ -6,6 +6,14 @@ from numpy.typing import NDArray
 
 from cardiolens.models import ECGMeasurements
 
+# Outside this range a computed heart rate is far more likely to be a beat
+# detection artifact (double-counted or missed beats) than a real, if
+# extreme, rhythm — bounded generously beyond clinical thresholds precisely
+# so it never masks a real (if severe) bradycardia/tachycardia, only
+# artifacts nothing sane accounts for.
+MIN_PLAUSIBLE_HEART_RATE_BPM = 20.0
+MAX_PLAUSIBLE_HEART_RATE_BPM = 300.0
+
 
 class ECGProcessingError(RuntimeError):
     """Raised when the signal is too short, too noisy, or otherwise cannot
@@ -41,6 +49,13 @@ def measure_ecg(signal: NDArray[np.float64], sampling_rate: int) -> ECGMeasureme
     rr_intervals_ms = np.diff(r_peaks) / sampling_rate * 1000.0
     mean_rr_ms = float(np.nanmean(rr_intervals_ms))
     heart_rate_bpm = 60_000.0 / mean_rr_ms
+
+    if not (MIN_PLAUSIBLE_HEART_RATE_BPM <= heart_rate_bpm <= MAX_PLAUSIBLE_HEART_RATE_BPM):
+        raise ECGProcessingError(
+            f"Fréquence cardiaque calculée ({heart_rate_bpm:.0f} bpm) hors de toute plage "
+            "physiologiquement plausible — probable erreur de détection des battements, "
+            "pas une mesure fiable."
+        )
 
     # Coefficient of variation of RR intervals — a coarse, well-established
     # screening signal for rhythm irregularity (e.g. possible atrial

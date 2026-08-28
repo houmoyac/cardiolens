@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
+from matplotlib.figure import Figure
 
 from cardiolens.models import AlertSeverity, AlertSource, ClinicalAlert
 from cardiolens.rules import ESC_DEFAULT, evaluate_rules
@@ -17,6 +19,25 @@ SAMPLE_CASES = {
     "Bradycardie sinusale (PTB-XL #2)": SAMPLE_DIR / "sample_bradycardia_ecg.csv",
     "Bloc AV 1er degré confirmé (PTB-XL #3017)": SAMPLE_DIR / "sample_pr_long_ecg.csv",
 }
+
+
+def plot_ecg_trace(signal: np.ndarray, sampling_rate: int) -> Figure:
+    time_s = np.arange(len(signal)) / sampling_rate
+    fig, ax = plt.subplots(figsize=(10, 2.8))
+    fig.patch.set_facecolor("#FFFFFF")
+    ax.set_facecolor("#FCFBF6")
+    ax.plot(time_s, signal, color="#1D4E89", linewidth=1.1)
+    ax.set_xlim(float(time_s[0]), float(time_s[-1]))
+    ax.set_xlabel("Temps (s)", fontsize=9, color="#6B7686")
+    ax.set_ylabel("Amplitude (mV)", fontsize=9, color="#6B7686")
+    ax.minorticks_on()
+    ax.grid(True, which="major", color="#F0C9C0", linewidth=0.7)
+    ax.grid(True, which="minor", color="#F8E4DF", linewidth=0.35)
+    ax.tick_params(labelsize=8, colors="#6B7686")
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    fig.tight_layout()
+    return fig
 
 st.set_page_config(
     page_title="CardioLens — outil de test interne", page_icon="🫀", layout="centered"
@@ -116,6 +137,9 @@ else:
     uploaded = st.file_uploader("Fichier CSV (une valeur de signal par ligne)")
     if uploaded is not None:
         signal = np.loadtxt(uploaded, delimiter=",").ravel()
+
+if signal is not None:
+    st.pyplot(plot_ecg_trace(signal, int(sampling_rate)), clear_figure=True)
 
 sex = st.radio("Sexe (pour le seuil QTc)", ["M", "F"], horizontal=True)
 

@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
+from sqlmodel import Session, select
 
 from cardiolens.afib_detection import predict_afib_probability
+from cardiolens.auth import create_access_token, get_current_user, hash_password, verify_password
+from cardiolens.auth_models import Token, User, UserLogin, UserPublic, UserRegister
+from cardiolens.db import get_session, init_db
 from cardiolens.models import AlertSeverity, AlertSource, ClinicalAlert, ECGMeasurements
 from cardiolens.rules import ESC_DEFAULT, evaluate_rules
 from cardiolens.signal_processing import ECGProcessingError, measure_ecg
@@ -14,6 +21,12 @@ from cardiolens.signal_processing import ECGProcessingError, measure_ecg
 # a clinically validated cutoff.
 AFIB_ALERT_THRESHOLD = 0.5
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    init_db()
+    yield
+
+
 app = FastAPI(
     title="CardioLens API",
     version="0.1.0",
@@ -21,7 +34,39 @@ app = FastAPI(
         "Aide à l'interprétation ECG (mesures + règles cliniques). "
         "Ne remplace pas le jugement médical."
     ),
+    lifespan=_lifespan,
 )
+
+
+@app.post("/auth/register", response_model=UserPublic, status_code=201)
+def register(payload: UserRegister, session: Session = Depends(get_session)) -> User:
+    existing = session.exec(select(User).where(User.email == payload.email)).first()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Un compte existe déjà avec cet email.")
+
+    user = User(
+        email=payload.email,
+        full_name=payload.full_name,
+        hashed_password=hash_password(payload.password),
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+@app.post("/auth/login", response_model=Token)
+def login(payload: UserLogin, session: Session = Depends(get_session)) -> Token:
+    user = session.exec(select(User).where(User.email == payload.email)).first()
+    if user is None or not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect.")
+
+    return Token(access_token=create_access_token(user.id))  # type: ignore[arg-type]
+
+
+@app.get("/auth/me", response_model=UserPublic)
+def me(current_user: User = Depends(get_current_user)) -> User:
+    return current_user
 
 
 class AnalyzeRequest(BaseModel):

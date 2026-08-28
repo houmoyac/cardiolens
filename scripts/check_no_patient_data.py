@@ -5,6 +5,9 @@ until someone runs `git add -f` — this is the defense-in-depth backstop.
 
 Blocked, unconditionally:
   - any WFDB signal/header pair (*.dat, *.hea) — the raw ECG waveform format
+  - any SQLite database file (*.db) — real account data once auth exists,
+    never meant to be committed (dev DBs are gitignored, this is the
+    git-add-f backstop)
   - anything under a data/patients/ or */patients/ directory
   - anything under sample_ecgs/ that is NOT already tracked (new bundled
     "sample" files must be reviewed — they're the one place raw signal data
@@ -17,14 +20,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-FORBIDDEN_SUFFIXES = {".dat", ".hea"}
 FORBIDDEN_DIR_MARKERS = ("patients/",)
 
 
 def is_forbidden(path: str) -> str | None:
-    p = Path(path)
-    if p.suffix.lower() in FORBIDDEN_SUFFIXES:
+    suffix = Path(path).suffix.lower()
+    if suffix in {".dat", ".hea"}:
         return f"fichier de signal ECG brut (WFDB) : {path}"
+    if suffix == ".db":
+        return f"base de données SQLite (données de comptes réelles) : {path}"
     if any(marker in path.replace("\\", "/") for marker in FORBIDDEN_DIR_MARKERS):
         return f"chemin réservé aux données patient : {path}"
     return None

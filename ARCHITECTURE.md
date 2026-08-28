@@ -206,17 +206,40 @@ un modèle profond sur signal brut. Un physicien peut se voir expliquer
 exactement ce que mesure chaque feature ; une boîte noire, non. Voir
 `afib_features.py`, `afib_detection.py`, `scripts/train_afib_model.py`.
 
-**Limite à ne jamais perdre de vue** : PTB-XL ne contient que **48
-enregistrements** avec un diagnostic de fibrillation atriale confirmé à
-100% (c'est un dataset généraliste, pas centré sur les arythmies). Le
-modèle entraîné dessus atteint une AUC ~0.99 en validation croisée — un
-chiffre **optimiste**, pas un chiffre validé cliniquement : l'échantillon
-est petit, et composé uniquement de cas "francs" (diagnostic confirmé à
-100%, aucun cas limite comme une FA paroxystique ou de simples
-extrasystoles fréquentes qui pourraient tromper le modèle). C'est un
-signal encourageant que l'approche (irrégularité RR) va dans le bon sens
-— cohérent avec la littérature publiée sur la détection de FA par HRV —
-pas une preuve de fiabilité clinique.
+**Données d'entraînement — deux versions, la seconde bien plus fiable.**
+Une première version utilisait PTB-XL (48 cas confirmés seulement — trop
+petit, cas "francs" uniquement). Remplacée par la **MIT-BIH Atrial
+Fibrillation Database (AFDB, PhysioNet, licence Open Data Commons
+Attribution v1.0)** : 23 patients réels, chacun avec plusieurs heures
+d'ECG continu et le rythme annoté dans le temps (épisodes FA/normal qui
+s'enchaînent), découpé en fenêtres de 30s → **3342 fenêtres, 1543 FA /
+1799 normales**. Bien plus représentatif qu'une poignée de cas isolés.
+
+**Une source d'ECG "à but pédagogique" a été explicitement écartée** —
+un collègue a suggéré un site (e-cardiogram.com) qui publie des exemples
+ECG avec interprétation. Ses mentions légales interdisent formellement
+toute reproduction hors usage strictement personnel ("La reproduction de
+tout ou partie de ce site... est formellement interdite sauf autorisation
+expresse"). Nourrir un modèle avec n'entre pas dans l'exception "usage
+personnel" — refusé, malgré l'insistance, en faveur d'AFDB (licence
+ouverte, faite pour cet usage).
+
+**Piège méthodologique évité, pas juste une note en bas de page** : les
+fenêtres d'un même patient sont fortement corrélées (même physiologie,
+mêmes conditions d'enregistrement). Une validation croisée par fenêtre
+aurait mélangé des fenêtres du même patient entre entraînement et test —
+fuite de données qui gonfle artificiellement les métriques. La validation
+croisée est faite **par patient** (`GroupKFold` sur l'identifiant
+d'enregistrement) : chaque pli de test contient des patients que le
+modèle n'a jamais vus à l'entraînement. C'est la façon honnête d'estimer
+la généralisation, pas la plus flatteuse.
+
+**Résultat (validation croisée par patient)** : AUC 0.975 (± 0.017),
+sensibilité 96.3%, spécificité 90.0%. Toujours un POC — 23 patients reste
+modeste, et aucun cas limite (FA paroxystique, extrasystoles fréquentes)
+n'a été testé spécifiquement — mais un signal bien plus solide que la
+version PTB-XL, obtenu avec une méthodologie qui ne se trompe pas
+elle-même sur ses propres résultats.
 
 **Comment cette limite est reflétée dans le produit**, pas juste dans un
 commentaire de code :
@@ -225,14 +248,47 @@ commentaire de code :
 - Message explicite "prédiction algorithmique, à corréler cliniquement"
 - Seuil de décision (`AFIB_ALERT_THRESHOLD` dans `api.py`) resté à la
   valeur par défaut du classifieur (0.5), pas retouché pour améliorer
-  artificiellement des métriques sur un si petit échantillon
+  artificiellement les métriques
 
 **Robustesse** : si la prédiction IA échoue pour une raison quelconque
 (modèle introuvable, erreur interne), `api.py` l'avale et renvoie quand
 même les alertes RÈGLE — la couche IA ne doit jamais casser la couche
 règles, qui reste la plus fiable.
 
-**Prochaine étape, pas encore faite** : élargir le jeu d'entraînement au
-maximum de cas AFIB disponibles ailleurs (PTB-XL seul est trop petit pour
-une vraie confiance), et valider sur des cas limites (FA paroxystique,
-extrasystoles fréquentes) avant d'envisager un usage au-delà du POC.
+**Prochaine étape, pas encore faite** : valider sur des cas limites (FA
+paroxystique, extrasystoles fréquentes) avant d'envisager un usage
+au-delà du POC.
+
+## Comptes et authentification
+
+Construit plus tôt que prévu — pas un raccourci, un vrai problème trouvé
+en construisant le compte-rendu PDF : le champ "Validé par" affichait un
+placeholder texte (`[Dr. Nom Prénom]`), non relié à personne. N'importe
+qui pouvait taper n'importe quel nom. Ce n'est pas un problème de
+protection d'accès (l'authentification classique), c'est un problème
+d'**identité** — qui a réellement validé cette interprétation.
+
+**Modèle cible** : un médecin, son propre téléphone, son propre compte —
+pas de connexions partagées. Ce modèle a une conséquence importante :
+une fois que chaque médecin a son propre appareil, l'essentiel du besoin
+("qui valide ce compte-rendu") est déjà couvert par une identité propre à
+l'appareil ; un vrai compte avec serveur n'ajoute de valeur que pour la
+synchronisation entre appareils, la sauvegarde centralisée, et une
+supervision multi-médecins plus tard.
+
+**Implémentation** : FastAPI + SQLite (`db.py`, `auth_models.py`,
+`auth.py`) — explicitement pas Firebase. Mots de passe hashés avec
+`bcrypt` directement (pas `passlib`, incompatible avec les versions
+récentes de `bcrypt` — `AttributeError: module 'bcrypt' has no attribute
+'__about__'`, bug connu, contourné en appelant `bcrypt` sans la couche de
+compatibilité). Tokens JWT (30 jours — un téléphone personnel, pas un
+kiosque partagé). Routes : `POST /auth/register`, `POST /auth/login`,
+`GET /auth/me` (protégée, sert de preuve que l'authentification protège
+vraiment quelque chose).
+
+**Pas encore fait** : rien côté mobile (écrans de connexion/inscription),
+et le compte-rendu ne référence pas encore l'utilisateur connecté à la
+place du placeholder — la brique backend est prête, pas encore branchée.
+Le secret JWT par défaut (`dev-only-insecure-secret-change-me`) est
+volontairement voyant : un vrai déploiement doit le remplacer via
+`CARDIOLENS_JWT_SECRET`, non négociable.

@@ -15,3 +15,7 @@ build/
 *.dat
 *.hea
 data/patients/
+
+# Local SQLite DB (real account data, even in dev)
+*.db
+*.db-journal

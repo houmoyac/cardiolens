@@ -9,6 +9,7 @@ NORMAL = ECGMeasurements(
     qrs_duration_ms=90,
     qt_interval_ms=380,
     qtc_ms=420,
+    qtc_fridericia_ms=410,
     rr_interval_ms=800,
     electrical_axis_deg=30,
 )

@@ -35,6 +35,13 @@ class ECGMeasurements(BaseModel):
     qrs_duration_ms: float
     qt_interval_ms: float
     qtc_ms: float
+    """Bazett-corrected QT — the formula the qtc_* clinical thresholds are
+    calibrated against. Known to over-correct at high heart rates and
+    under-correct at low ones; see qtc_fridericia_ms for that regime."""
+    qtc_fridericia_ms: float
+    """Fridericia-corrected QT — informational only, not evaluated against
+    thresholds yet. More reliable than Bazett outside a normal heart rate
+    range; shown so the physician can judge, not to silently override Bazett."""
     rr_interval_ms: float
     electrical_axis_deg: float | None = None
     """None until multi-lead (I, aVF) input is wired in — never fabricate 0°."""

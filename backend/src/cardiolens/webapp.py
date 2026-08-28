@@ -56,7 +56,8 @@ st.markdown(
     .cl-title { font-size: 26px; font-weight: 700; color: #12203A; letter-spacing: -0.3px; }
     .cl-subtitle { color: #6B7686; font-size: 14px; margin-bottom: 28px; }
     .cl-chips {
-        display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 18px 0;
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 10px; margin: 18px 0;
     }
     .cl-chip {
         background: #FFFFFF; border: 1px solid #DCE2EA; border-radius: 10px; padding: 12px 14px;
@@ -181,8 +182,11 @@ else:
                 '<div class="cl-chip-label">QRS</div>'
                 f'<div class="cl-chip-value">{measurements.qrs_duration_ms:.0f} ms</div></div>'
                 f'<div class="cl-chip{" warn" if qtc_warn else ""}">'
-                '<div class="cl-chip-label">QTC</div>'
+                '<div class="cl-chip-label">QTc (Bazett)</div>'
                 f'<div class="cl-chip-value">{measurements.qtc_ms:.0f} ms</div></div>'
+                '<div class="cl-chip">'
+                '<div class="cl-chip-label">QTc (Fridericia)</div>'
+                f'<div class="cl-chip-value">{measurements.qtc_fridericia_ms:.0f} ms</div></div>'
                 "</div>"
                 '<div class="cl-section-label">'
                 '<span class="cl-badge rule">RÈGLE</span>'

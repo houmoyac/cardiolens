@@ -57,14 +57,17 @@ def measure_ecg(signal: NDArray[np.float64], sampling_rate: int) -> ECGMeasureme
             "Impossible de délinéer de façon fiable les ondes P/QRS/T sur ce tracé."
         )
 
-    qtc_ms = qt_interval_ms / np.sqrt(mean_rr_ms / 1000.0)  # Bazett
+    rr_s = mean_rr_ms / 1000.0
+    qtc_bazett_ms = qt_interval_ms / np.sqrt(rr_s)
+    qtc_fridericia_ms = qt_interval_ms / np.cbrt(rr_s)
 
     return ECGMeasurements(
         heart_rate_bpm=heart_rate_bpm,
         pr_interval_ms=pr_interval_ms,
         qrs_duration_ms=qrs_duration_ms,
         qt_interval_ms=qt_interval_ms,
-        qtc_ms=qtc_ms,
+        qtc_ms=qtc_bazett_ms,
+        qtc_fridericia_ms=qtc_fridericia_ms,
         rr_interval_ms=mean_rr_ms,
     )
 

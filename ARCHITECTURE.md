@@ -139,10 +139,21 @@ construit d'un bloc :
    - Après correction : le tracé extrait sur cette image réelle correspond
      visuellement aux vrais complexes QRS (mêmes pics, même rythme) —
      première validation sur du contenu non synthétique.
-6. **Pas encore fait** : détection automatique de la couleur de grille
-   (actuellement il faut la connaître d'avance), robustesse au bruit d'une
-   vraie photo prise au téléphone (éclairage variable, papier froissé,
-   document qui ne se détache pas clairement de son arrière-plan).
+6. **Fait** : détection automatique de la couleur de grille —
+   `detect_grid_color`. Principe : le fond (papier) domine largement en
+   luminosité, le tracé est la population la plus sombre (son **minimum**,
+   pas un percentile — un tracé fin peut représenter moins de 1% des
+   pixels, et un seuil par percentile retombait alors sur la couleur de la
+   grille elle-même plutôt que sur le noir réel, bug trouvé en écrivant le
+   test). La grille est la couleur médiane de ce qui reste entre les deux.
+   Revalidé sur la vraie image de l'incrément 5, **sans lui donner aucun
+   indice de couleur** : détecte (235,235,235), tolérance 27 — cohérent
+   avec la mesure manuelle faite précédemment (~240,240,240) — et retrouve
+   le même espacement de grille (23px) qu'avec la couleur donnée à la
+   main.
+7. **Pas encore fait** : robustesse au bruit d'une vraie photo prise au
+   téléphone (éclairage variable, papier froissé, document qui ne se
+   détache pas clairement de son arrière-plan).
 
 **Hypothèses fortes à garder en tête** — la grille est supposée carrée
 (même espacement horizontal/vertical) et sa couleur doit être connue

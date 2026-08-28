@@ -17,6 +17,7 @@ from cardiolens.image_digitization import (
     TraceExtractionError,
     calibrate_trace,
     correct_perspective,
+    detect_grid_color,
     detect_grid_spacing_px,
     extract_trace_from_image,
     find_document_corners,
@@ -114,22 +115,61 @@ def test_trace_to_signal_fills_small_gaps() -> None:
 
 
 def _render_grid_image(
-    spacing_px: int = 20, width_px: int = 400, height_px: int = 300
+    spacing_px: int = 20,
+    width_px: int = 400,
+    height_px: int = 300,
+    grid_color: tuple[int, int, int] = (255, 150, 150),
+    with_trace: bool = False,
 ) -> np.ndarray:
     image = np.full((height_px, width_px, 3), 255, dtype=np.uint8)
-    grid_color = (255, 150, 150)
     for x in range(0, width_px, spacing_px):
         image[:, x] = grid_color
     for y in range(0, height_px, spacing_px):
         image[y, :] = grid_color
+    if with_trace:
+        # A real ECG image always has dark trace ink alongside the grid —
+        # detect_grid_color relies on that contrast (background vs. ink)
+        # to isolate the grid as the mid-tone left over; a bare grid with
+        # no ink at all isn't a realistic case to test it against.
+        x = np.linspace(0, 4 * np.pi, width_px)
+        y = (height_px / 2 + np.sin(x) * height_px * 0.2).astype(int)
+        for col, row in enumerate(y):
+            image[max(0, row - 1) : row + 2, col] = (0, 0, 0)
     return image
 
 
 def test_detect_grid_spacing_recovers_known_value() -> None:
     known_spacing = 20
-    image = _render_grid_image(spacing_px=known_spacing)
+    image = _render_grid_image(spacing_px=known_spacing, with_trace=True)
 
     detected = detect_grid_spacing_px(image)
+
+    assert abs(detected - known_spacing) <= 1
+
+
+def test_detect_grid_color_finds_pink_grid() -> None:
+    image = _render_grid_image(grid_color=(255, 150, 150), with_trace=True)
+    color, tolerance = detect_grid_color(image)
+    assert all(abs(a - b) <= 15 for a, b in zip(color, (255, 150, 150), strict=True))
+    assert tolerance > 0
+
+
+def test_detect_grid_color_finds_gray_grid() -> None:
+    """The exact case that broke on a real, non-synthetic ECG image: a
+    gray grid, not the red/pink previously assumed by default."""
+    image = _render_grid_image(grid_color=(240, 240, 240), with_trace=True)
+    color, tolerance = detect_grid_color(image)
+    assert all(abs(a - b) <= 15 for a, b in zip(color, (240, 240, 240), strict=True))
+    assert tolerance > 0
+
+
+def test_detect_grid_spacing_auto_detects_gray_grid_color() -> None:
+    known_spacing = 20
+    image = _render_grid_image(
+        spacing_px=known_spacing, grid_color=(240, 240, 240), with_trace=True
+    )
+
+    detected = detect_grid_spacing_px(image)  # no grid_rgb given — must auto-detect
 
     assert abs(detected - known_spacing) <= 1
 

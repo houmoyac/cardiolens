@@ -107,13 +107,61 @@ class GridDetectionError(RuntimeError):
     downstream measurement (ms/mV) without looking wrong."""
 
 
+def detect_grid_color(
+    image: NDArray[np.uint8],
+) -> tuple[tuple[int, int, int], int]:
+    """Estimate the grid's color and a matching tolerance, instead of
+    assuming a fixed one — found necessary in practice: a real ECG image
+    tested against this pipeline turned out to use a gray grid, not the
+    red/pink assumed by default (see ARCHITECTURE.md).
+
+    Approach: background (paper) is the most common — brightest — color by
+    far; ink (the trace) is a small population of the darkest pixels. The
+    grid is whatever mid-tone color remains once both are excluded — not
+    the background's peak brightness, not among the darkest few percent.
+    Returns the median color of that remaining population, and a tolerance
+    sized to its spread (so a fainter or heavier-printed grid still
+    matches consistently on the next call to `detect_grid_spacing_px`).
+    """
+    gray = (
+        np.asarray(Image.fromarray(image).convert("L"), dtype=np.float64)
+        if image.ndim == 3
+        else image.astype(np.float64)
+    )
+    rgb = image if image.ndim == 3 else np.stack([image] * 3, axis=-1)
+
+    background_level = float(np.percentile(gray, 90))
+    # The true minimum, not a low percentile: the trace can be a thin
+    # enough stroke (well under 1% of pixels) that a percentile-based
+    # threshold lands inside the grid's own population instead of black
+    # ink — found by an actual test failure, not a hypothetical.
+    ink_level = float(gray.min())
+    mid_tone = (gray > ink_level + 10) & (gray < background_level - 5)
+
+    if not np.any(mid_tone):
+        raise GridDetectionError(
+            "Aucune couleur intermédiaire (ni fond, ni encre) trouvée dans "
+            "l'image — impossible d'estimer la couleur de la grille."
+        )
+
+    candidates = rgb[mid_tone].astype(np.float64)
+    median_color = tuple(int(round(v)) for v in np.median(candidates, axis=0))
+    spread = float(np.median(np.abs(candidates - np.median(candidates, axis=0))))
+    tolerance = max(20, int(round(spread * 3)))
+
+    return median_color, tolerance  # type: ignore[return-value]
+
+
 def detect_grid_spacing_px(
     image: NDArray[np.uint8],
-    grid_rgb: tuple[int, int, int] = (255, 150, 150),
-    tolerance: int = 60,
+    grid_rgb: tuple[int, int, int] | None = None,
+    tolerance: int | None = None,
 ) -> float:
-    """Estimate the pixel spacing between regular grid lines of a given
-    color (standard ECG paper prints a light red/pink mm-grid).
+    """Estimate the pixel spacing between regular grid lines.
+
+    If `grid_rgb`/`tolerance` aren't given, both are estimated first via
+    `detect_grid_color` — pass them explicitly only when the color is
+    already known (e.g. re-checking a specific hypothesis, or in a test).
 
     Assumes a square grid (equal horizontal/vertical spacing in real mm) —
     true for standard ECG paper — and estimates spacing from the more
@@ -122,6 +170,11 @@ def detect_grid_spacing_px(
     typical strip is much wider than tall, giving more periods to lock
     onto; assuming a square grid, the same spacing applies vertically.
     """
+    if grid_rgb is None or tolerance is None:
+        detected_rgb, detected_tolerance = detect_grid_color(image)
+        grid_rgb = grid_rgb if grid_rgb is not None else detected_rgb
+        tolerance = tolerance if tolerance is not None else detected_tolerance
+
     diff = np.abs(image.astype(int) - np.array(grid_rgb)).sum(axis=-1)
     mask = diff < tolerance
 

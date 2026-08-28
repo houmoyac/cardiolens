@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import neurokit2 as nk
 import numpy as np
 import pytest
 
+from cardiolens.rules import ESC_DEFAULT, evaluate_rules
 from cardiolens.signal_processing import ECGProcessingError, measure_ecg
+
+SAMPLE_DIR = Path(__file__).parent.parent / "src" / "cardiolens" / "sample_ecgs"
 
 
 def test_measure_ecg_on_simulated_normal_rhythm() -> None:
@@ -32,6 +37,27 @@ def test_measure_ecg_rejects_flat_signal() -> None:
 
     with pytest.raises(ECGProcessingError):
         measure_ecg(signal, sampling_rate=sampling_rate)
+
+
+def test_measure_ecg_on_real_normal_ptbxl_recording() -> None:
+    """Regression test on a real, anonymized, publicly labeled 'NORM'
+    PTB-XL recording — synthetic signals alone hid real-signal delineation
+    problems (see git history) that this catches."""
+    signal = np.loadtxt(SAMPLE_DIR / "sample_normal_ecg.csv", delimiter=",").ravel()
+
+    measurements = measure_ecg(signal, sampling_rate=500)
+    alerts = evaluate_rules(measurements, ESC_DEFAULT, sex="M")
+
+    assert all(a.code == "within_normal_limits" for a in alerts)
+
+
+def test_measure_ecg_on_real_bradycardia_ptbxl_recording() -> None:
+    signal = np.loadtxt(SAMPLE_DIR / "sample_bradycardia_ecg.csv", delimiter=",").ravel()
+
+    measurements = measure_ecg(signal, sampling_rate=500)
+    alerts = evaluate_rules(measurements, ESC_DEFAULT, sex="M")
+
+    assert any(a.code == "bradycardia" for a in alerts)
 
 
 def test_measure_ecg_rejects_too_short_signal() -> None:

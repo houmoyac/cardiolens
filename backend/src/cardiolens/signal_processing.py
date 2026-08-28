@@ -28,7 +28,11 @@ def measure_ecg(signal: NDArray[np.float64], sampling_rate: int) -> ECGMeasureme
                 "Signal trop court ou de trop mauvaise qualité pour détecter un rythme."
             )
 
-        _, waves = nk.ecg_delineate(cleaned, r_peaks, sampling_rate=sampling_rate, method="dwt")
+        # "peak" delineation (Q/S peaks rather than DWT-estimated onset/offset
+        # points) was empirically far more stable on real PTB-XL signals —
+        # DWT onset/offset detection drifted enough per-beat to report
+        # implausibly wide QRS on textbook-normal recordings.
+        _, waves = nk.ecg_delineate(cleaned, r_peaks, sampling_rate=sampling_rate, method="peak")
     except ECGProcessingError:
         raise
     except Exception as exc:  # neurokit2 raises broad/varied errors on bad signals
@@ -38,9 +42,15 @@ def measure_ecg(signal: NDArray[np.float64], sampling_rate: int) -> ECGMeasureme
     mean_rr_ms = float(np.nanmean(rr_intervals_ms))
     heart_rate_bpm = 60_000.0 / mean_rr_ms
 
-    pr_interval_ms = _mean_interval_ms(waves, "ECG_P_Onsets", "ECG_R_Onsets", sampling_rate)
-    qrs_duration_ms = _mean_interval_ms(waves, "ECG_R_Onsets", "ECG_R_Offsets", sampling_rate)
-    qt_interval_ms = _mean_interval_ms(waves, "ECG_R_Onsets", "ECG_T_Offsets", sampling_rate)
+    pr_interval_ms = _robust_interval_ms(
+        waves, "ECG_P_Onsets", "ECG_Q_Peaks", sampling_rate, min_ms=80.0, max_ms=300.0
+    )
+    qrs_duration_ms = _robust_interval_ms(
+        waves, "ECG_Q_Peaks", "ECG_S_Peaks", sampling_rate, min_ms=40.0, max_ms=200.0
+    )
+    qt_interval_ms = _robust_interval_ms(
+        waves, "ECG_Q_Peaks", "ECG_T_Offsets", sampling_rate, min_ms=200.0, max_ms=600.0
+    )
 
     if pr_interval_ms is None or qrs_duration_ms is None or qt_interval_ms is None:
         raise ECGProcessingError(
@@ -59,12 +69,19 @@ def measure_ecg(signal: NDArray[np.float64], sampling_rate: int) -> ECGMeasureme
     )
 
 
-def _mean_interval_ms(
+def _robust_interval_ms(
     waves: dict[str, list[float]],
     start_key: str,
     end_key: str,
     sampling_rate: int,
+    min_ms: float,
+    max_ms: float,
 ) -> float | None:
+    """Aggregate a per-beat interval, rejecting physiologically implausible
+    beats before combining. Per-beat P/QRS onset-offset delineation is noisy
+    on real signals — a handful of misdetected beats must not silently drag
+    the reported measurement outside plausible range. Median, not mean, for
+    the same reason: robust to the outliers that remain."""
     starts = np.asarray(waves.get(start_key, []), dtype=float)
     ends = np.asarray(waves.get(end_key, []), dtype=float)
     if starts.size == 0 or ends.size == 0:
@@ -73,8 +90,8 @@ def _mean_interval_ms(
     n = min(len(starts), len(ends))
     diffs_ms = (ends[:n] - starts[:n]) / sampling_rate * 1000.0
     diffs_ms = diffs_ms[~np.isnan(diffs_ms)]
-    diffs_ms = diffs_ms[diffs_ms > 0]
-    if diffs_ms.size == 0:
+    diffs_ms = diffs_ms[(diffs_ms >= min_ms) & (diffs_ms <= max_ms)]
+    if diffs_ms.size < 3:
         return None
 
-    return float(np.mean(diffs_ms))
+    return float(np.median(diffs_ms))

@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import streamlit as st
 
-from cardiolens.models import AlertSeverity, AlertSource
+from cardiolens.models import AlertSeverity, AlertSource, ClinicalAlert
 from cardiolens.rules import ESC_DEFAULT, evaluate_rules
 from cardiolens.signal_processing import ECGProcessingError, measure_ecg
 
@@ -70,6 +70,12 @@ st.markdown(
         background: #F0F3F1; border: 1px solid #DDE6E1; border-left: 3px solid #6B8E7C;
         color: #3A5647;
     }
+    .cl-card {
+        background: #FFFFFF; border: 1px solid #DCE2EA; border-radius: 12px;
+        padding: 20px 20px 6px 20px; margin: 18px 0;
+    }
+    .cl-card .cl-chips { margin-top: 0; }
+    .cl-card .cl-section-label:first-of-type { margin-top: 4px; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -129,52 +135,49 @@ else:
             qrs_warn = measurements.qrs_duration_ms > 120
             qtc_warn = measurements.qtc_ms > qtc_threshold
 
-            chips_html = f"""
-            <div class="cl-chips">
-                <div class="cl-chip">
-                    <div class="cl-chip-label">FC</div>
-                    <div class="cl-chip-value">{measurements.heart_rate_bpm:.0f} bpm</div>
+            def alert_html(alert: ClinicalAlert) -> str:
+                css = "warning" if alert.severity == AlertSeverity.WARNING else "info"
+                return f'<div class="cl-alert {css}">{alert.message}</div>'
+
+            rule_alerts_html = "".join(
+                alert_html(a) for a in alerts if a.source == AlertSource.RULE
+            )
+
+            card_html = f"""
+            <div class="cl-card">
+                <div class="cl-chips">
+                    <div class="cl-chip">
+                        <div class="cl-chip-label">FC</div>
+                        <div class="cl-chip-value">{measurements.heart_rate_bpm:.0f} bpm</div>
+                    </div>
+                    <div class="cl-chip">
+                        <div class="cl-chip-label">PR</div>
+                        <div class="cl-chip-value">{measurements.pr_interval_ms:.0f} ms</div>
+                    </div>
+                    <div class="cl-chip{" warn" if qrs_warn else ""}">
+                        <div class="cl-chip-label">QRS</div>
+                        <div class="cl-chip-value">{measurements.qrs_duration_ms:.0f} ms</div>
+                    </div>
+                    <div class="cl-chip{" warn" if qtc_warn else ""}">
+                        <div class="cl-chip-label">QTC</div>
+                        <div class="cl-chip-value">{measurements.qtc_ms:.0f} ms</div>
+                    </div>
                 </div>
-                <div class="cl-chip">
-                    <div class="cl-chip-label">PR</div>
-                    <div class="cl-chip-value">{measurements.pr_interval_ms:.0f} ms</div>
+
+                <div class="cl-section-label">
+                    <span class="cl-badge rule">RÈGLE</span>
+                    <span class="cl-section-title">Alertes cliniques — mesures directes</span>
                 </div>
-                <div class="cl-chip{" warn" if qrs_warn else ""}">
-                    <div class="cl-chip-label">QRS</div>
-                    <div class="cl-chip-value">{measurements.qrs_duration_ms:.0f} ms</div>
+                {rule_alerts_html}
+
+                <div class="cl-section-label">
+                    <span class="cl-badge ai">IA</span>
+                    <span class="cl-section-title">Détection algorithmique</span>
                 </div>
-                <div class="cl-chip{" warn" if qtc_warn else ""}">
-                    <div class="cl-chip-label">QTC</div>
-                    <div class="cl-chip-value">{measurements.qtc_ms:.0f} ms</div>
+                <div class="cl-alert info">
+                    Aucun modèle IA branché pour l'instant — cette section apparaîtra une fois le
+                    composant de détection (phase 2) ajouté.
                 </div>
             </div>
             """
-            st.markdown(chips_html, unsafe_allow_html=True)
-
-            st.markdown(
-                '<div class="cl-section-label">'
-                '<span class="cl-badge rule">RÈGLE</span>'
-                '<span class="cl-section-title">Alertes cliniques — mesures directes</span>'
-                "</div>",
-                unsafe_allow_html=True,
-            )
-            for alert in alerts:
-                if alert.source != AlertSource.RULE:
-                    continue
-                css_class = "warning" if alert.severity == AlertSeverity.WARNING else "info"
-                st.markdown(
-                    f'<div class="cl-alert {css_class}">{alert.message}</div>',
-                    unsafe_allow_html=True,
-                )
-
-            st.markdown(
-                '<div class="cl-section-label">'
-                '<span class="cl-badge ai">IA</span>'
-                '<span class="cl-section-title">Détection algorithmique</span>'
-                "</div>",
-                unsafe_allow_html=True,
-            )
-            st.caption(
-                "Aucun modèle IA branché pour l'instant — cette section apparaîtra une fois "
-                "le composant de détection (phase 2) ajouté."
-            )
+            st.markdown(card_html, unsafe_allow_html=True)

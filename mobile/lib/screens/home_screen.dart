@@ -36,7 +36,7 @@ class HomeScreen extends StatelessWidget {
             title: 'Importer un ECG',
             subtitle: 'Fichier numérique (CSV pour le moment)',
             filled: true,
-            onTap: () => _startAnalysis(context, sampleCases.first),
+            onTap: () => _pickDemoCaseAndAnalyze(context),
           ),
           const SizedBox(height: 10),
           _ImportButton(
@@ -79,6 +79,54 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Real file import isn't wired to anything yet (see EcgCase docs) — a
+  /// picker here, instead of silently always analyzing the same case, is
+  /// honest about that: it's a stand-in for choosing a file, not a fake
+  /// working importer.
+  Future<void> _pickDemoCaseAndAnalyze(BuildContext context) async {
+    final chosen = await showModalBottomSheet<EcgCase>(
+      context: context,
+      backgroundColor: CardioLensColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
+              child: Text(
+                'Import de fichier pas encore branché — choisis un cas '
+                'de démonstration à analyser',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: CardioLensColors.textSecondary,
+                ),
+              ),
+            ),
+            for (final ecgCase in sampleCases)
+              ListTile(
+                leading: const Icon(
+                  Icons.monitor_heart_outlined,
+                  color: CardioLensColors.primary,
+                ),
+                title: Text(ecgCase.patientLabel),
+                subtitle: Text(ecgCase.dateLabel),
+                onTap: () => Navigator.of(sheetContext).pop(ecgCase),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (chosen != null && context.mounted) {
+      _startAnalysis(context, chosen);
+    }
   }
 
   void _startAnalysis(BuildContext context, EcgCase demoCase) {

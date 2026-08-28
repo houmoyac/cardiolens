@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:cardiolens_app/main.dart';
@@ -23,12 +24,18 @@ void main() {
     expect(find.textContaining('Bradycardie'), findsOneWidget);
   });
 
-  testWidgets('Importing navigates through analyzing to results', (
+  testWidgets('Importing opens a demo-case picker, then analyzes it', (
     tester,
   ) async {
     await tester.pumpWidget(const CardioLensApp());
 
     await tester.tap(find.text('Importer un ECG'));
+    await tester.pumpAndSettle();
+
+    // The sheet's ListTile is the only widget of that type showing this
+    // text — the home screen's recent-case tiles use a different widget —
+    // so this unambiguously targets the picker, not the list behind it.
+    await tester.tap(find.widgetWithText(ListTile, 'Patient #A-2288'));
     // Two pumps: the new route is briefly marked offstage for exactly one
     // zero-duration frame (Flutter avoids a flash while the push transition
     // starts) — a single pump(duration) alone doesn't clear that flag.

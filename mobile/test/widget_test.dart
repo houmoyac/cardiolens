@@ -24,9 +24,9 @@ void main() {
     expect(find.textContaining('Bradycardie'), findsOneWidget);
   });
 
-  testWidgets('Importing opens a demo-case picker, then analyzes it', (
-    tester,
-  ) async {
+  testWidgets('Importing opens a demo-case picker, then shows a real API error '
+      '(Flutter test env blocks real HTTP — this exercises the honest '
+      'error path, not a silent fallback)', (tester) async {
     await tester.pumpWidget(const CardioLensApp());
 
     await tester.tap(find.text('Importer un ECG'));
@@ -37,15 +37,24 @@ void main() {
     // so this unambiguously targets the picker, not the list behind it.
     await tester.tap(find.widgetWithText(ListTile, 'Patient #A-2288'));
     // Two pumps: the new route is briefly marked offstage for exactly one
-    // zero-duration frame (Flutter avoids a flash while the push transition
-    // starts) — a single pump(duration) alone doesn't clear that flag.
+    // zero-duration frame (Flutter avoids a flash while the push
+    // transition starts) — a single pump(duration) alone doesn't clear
+    // that flag.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
-    expect(find.text('Analyse en cours'), findsOneWidget);
+    await tester.pumpAndSettle();
 
-    await tester.pump(
-      const Duration(seconds: 2),
-    ); // past the auto-navigate delay
+    // The real network call fails in the test environment — the app
+    // must show an explicit error, never silently swap in fake data.
+    expect(find.text('Réessayer'), findsOneWidget);
+    expect(
+      find.text('Continuer avec des données de démo (pas un vrai résultat)'),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.text('Continuer avec des données de démo (pas un vrai résultat)'),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(ResultsScreen), findsOneWidget);
   });

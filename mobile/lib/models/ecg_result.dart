@@ -41,9 +41,10 @@ class EcgMeasurements {
   final double rrVariabilityPct;
 }
 
-/// One analyzed ECG: measurements + alerts, as returned by (eventually) the
-/// backend's /analyze endpoint. Today this is populated from bundled sample
-/// data — see lib/data/sample_cases.dart — not a live API call.
+/// One analyzed ECG: measurements + alerts, as returned by the backend's
+/// /analyze endpoint (see lib/services/api_client.dart) — or, as a fallback
+/// when the backend isn't reachable, the bundled static values in
+/// lib/data/sample_cases.dart.
 class EcgCase {
   const EcgCase({
     required this.id,
@@ -51,6 +52,7 @@ class EcgCase {
     required this.dateLabel,
     required this.measurements,
     required this.alerts,
+    this.signalAssetPath,
     this.sourceLabel = 'PTB-XL (dataset public)',
     this.leadLabel = 'Dérivation DII',
     this.samplingRateHz = 500,
@@ -62,6 +64,11 @@ class EcgCase {
   final String dateLabel;
   final EcgMeasurements measurements;
   final List<ClinicalAlert> alerts;
+
+  /// Path to the bundled raw signal for this case (assets/sample_ecgs/...),
+  /// sent to the real backend when it's reachable. Null for a case that
+  /// only ever has static fallback measurements.
+  final String? signalAssetPath;
 
   /// Provenance shown to the physician so they know what they're looking
   /// at — never invented per-case, just the real, current pipeline

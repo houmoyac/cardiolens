@@ -58,9 +58,7 @@ class _ScanningScreenState extends State<ScanningScreen> {
               ),
               title: const Text('Prendre une photo'),
               onTap: () async {
-                final file = await picker.pickImage(
-                  source: ImageSource.camera,
-                );
+                final file = await picker.pickImage(source: ImageSource.camera);
                 if (sheetContext.mounted) Navigator.of(sheetContext).pop(file);
               },
             ),

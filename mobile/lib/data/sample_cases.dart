@@ -2,14 +2,18 @@ import '../models/ecg_result.dart';
 
 /// Bundled sample cases — the same 3 real, anonymized PTB-XL recordings
 /// already validated through the rules engine and the web test tool
-/// (see backend/src/cardiolens/sample_ecgs/). Values here are the actual
-/// measured output, not invented numbers, so this screen shows something
-/// real while the app isn't wired to a live backend yet.
+/// (see backend/src/cardiolens/sample_ecgs/). The measurements/alerts here
+/// are the last known-good values from the backend, used as a fallback
+/// display and for the read-only "Analyses récentes" list; when a case is
+/// picked to actually analyze (see ScanningScreen/AnalyzingScreen), its
+/// signalAssetPath is sent to the real backend and the real response is
+/// used instead.
 final sampleCases = <EcgCase>[
   const EcgCase(
     id: 'ptbxl-1',
     patientLabel: 'Patient #A-2288',
     dateLabel: 'Hier, 16:05',
+    signalAssetPath: 'assets/sample_ecgs/sample_normal_ecg.csv',
     measurements: EcgMeasurements(
       heartRateBpm: 64,
       prIntervalMs: 134,
@@ -31,6 +35,7 @@ final sampleCases = <EcgCase>[
     id: 'ptbxl-2',
     patientLabel: 'Patient #A-2291',
     dateLabel: "Aujourd'hui, 09:42",
+    signalAssetPath: 'assets/sample_ecgs/sample_bradycardia_ecg.csv',
     measurements: EcgMeasurements(
       heartRateBpm: 48,
       prIntervalMs: 166,
@@ -52,6 +57,7 @@ final sampleCases = <EcgCase>[
     id: 'ptbxl-3017',
     patientLabel: 'Patient #A-2279',
     dateLabel: 'Lun. 24, 11:18',
+    signalAssetPath: 'assets/sample_ecgs/sample_pr_long_ecg.csv',
     measurements: EcgMeasurements(
       heartRateBpm: 61,
       prIntervalMs: 180,

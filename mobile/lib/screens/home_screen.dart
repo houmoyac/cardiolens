@@ -52,9 +52,9 @@ class HomeScreen extends StatelessWidget {
             title: 'Scanner via photo',
             subtitle: 'Tracé papier (aperçu du parcours)',
             filled: false,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ScanningScreen()),
-            ),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ScanningScreen())),
           ),
           const SizedBox(height: 28),
           Row(

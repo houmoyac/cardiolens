@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../models/ecg_result.dart';
+import '../services/api_client.dart';
+import '../services/api_config.dart';
 import '../theme.dart';
 import 'results_screen.dart';
 
-/// Shown briefly after "Importer un ECG". Today this just waits a fixed
-/// delay before showing the picked sample case — there is no live backend
-/// call yet (see EcgCase docs), so the step list below describes the
-/// pipeline conceptually rather than reporting real progress.
+/// Shown after "Importer un ECG". If the picked case has a bundled signal
+/// (see EcgCase.signalAssetPath), this sends it to the real backend and
+/// shows its real response — the first part of the app not using static
+/// sample data. On failure (backend unreachable, phone off the Mac's
+/// WiFi, ...) it shows an explicit error, never a silent fallback to
+/// fake data — the physician must always know which they're looking at.
 class AnalyzingScreen extends StatefulWidget {
   const AnalyzingScreen({super.key, required this.resultCase});
 
@@ -18,17 +22,53 @@ class AnalyzingScreen extends StatefulWidget {
 }
 
 class _AnalyzingScreenState extends State<AnalyzingScreen> {
+  String? _error;
+
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(milliseconds: 1400), () {
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => ResultsScreen(ecgCase: widget.resultCase),
-        ),
+    _analyze();
+  }
+
+  Future<void> _analyze() async {
+    setState(() => _error = null);
+
+    final assetPath = widget.resultCase.signalAssetPath;
+    if (assetPath == null) {
+      await Future.delayed(const Duration(milliseconds: 1400));
+      _goToResults(widget.resultCase);
+      return;
+    }
+
+    try {
+      final signal = await loadBundledSignal(assetPath);
+      final client = ApiClient(baseUrl: apiBaseUrl);
+      final result = await client.analyze(
+        patientLabel: widget.resultCase.patientLabel,
+        dateLabel: widget.resultCase.dateLabel,
+        signal: signal,
+        samplingRateHz: widget.resultCase.samplingRateHz,
       );
-    });
+      _goToResults(result);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    }
+  }
+
+  void _goToResults(EcgCase ecgCase) {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => ResultsScreen(ecgCase: ecgCase)),
+    );
+  }
+
+  void _continueWithFallbackData() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => ResultsScreen(ecgCase: widget.resultCase),
+      ),
+    );
   }
 
   @override
@@ -38,85 +78,90 @@ class _AnalyzingScreenState extends State<AnalyzingScreen> {
       body: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 64,
-                height: 64,
-                child: CircularProgressIndicator(
-                  strokeWidth: 5,
-                  color: CardioLensColors.primary,
+          child: _error != null
+              ? _ErrorState(
+                  message: _error!,
+                  onRetry: _analyze,
+                  onUseFallback: _continueWithFallbackData,
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 64,
+                      height: 64,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 5,
+                        color: CardioLensColors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    const Text(
+                      'Analyse en cours',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Envoi au serveur et interprétation du tracé ECG.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: CardioLensColors.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 28),
-              const Text(
-                'Analyse en cours',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Lecture et interprétation du tracé ECG.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: CardioLensColors.textSecondary,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 28),
-              const _Step(label: 'Lecture du signal numérique', done: true),
-              const _Step(label: 'Détection des ondes P / QRS / T', done: true),
-              const _Step(
-                label: 'Calcul des mesures (FC, PR, QRS, QTc)',
-                done: true,
-              ),
-              const _Step(
-                label: 'Application des règles cliniques',
-                done: false,
-              ),
-              const _Step(
-                label: 'Vérification IA sur cas complexes',
-                done: false,
-              ),
-            ],
-          ),
         ),
       ),
     );
   }
 }
 
-class _Step extends StatelessWidget {
-  const _Step({required this.label, required this.done});
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({
+    required this.message,
+    required this.onRetry,
+    required this.onUseFallback,
+  });
 
-  final String label;
-  final bool done;
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback onUseFallback;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Icon(
-            done ? Icons.check_circle : Icons.circle_outlined,
-            size: 18,
-            color: done ? CardioLensColors.okText : CardioLensColors.textMuted,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(
+          Icons.cloud_off,
+          size: 40,
+          color: CardioLensColors.alertAccent,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 13.5,
+            color: CardioLensColors.textPrimary,
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                color: done
-                    ? CardioLensColors.textPrimary
-                    : CardioLensColors.textMuted,
-              ),
-            ),
+        ),
+        const SizedBox(height: 20),
+        ElevatedButton(onPressed: onRetry, child: const Text('Réessayer')),
+        const SizedBox(height: 10),
+        TextButton(
+          onPressed: onUseFallback,
+          child: const Text(
+            'Continuer avec des données de démo (pas un vrai résultat)',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: CardioLensColors.textMuted),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

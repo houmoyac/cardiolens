@@ -52,6 +52,13 @@ def test_qtc_prolonged_uses_sex_specific_threshold() -> None:
     assert not any(a.code == "qtc_prolonged" for a in alerts_female)
 
 
+def test_qtc_short_detected() -> None:
+    m = NORMAL.model_copy(update={"qtc_ms": 320})
+    alerts = evaluate_rules(m, ESC_DEFAULT, sex="M")
+    assert any(a.code == "qtc_short" for a in alerts)
+    assert not any(a.code == "qtc_prolonged" for a in alerts)
+
+
 def test_axis_deviation_skipped_when_unmeasured() -> None:
     m = NORMAL.model_copy(update={"electrical_axis_deg": None})
     alerts = evaluate_rules(m, ESC_DEFAULT)

@@ -21,6 +21,7 @@ class GuidelineThresholds:
     qrs_wide_ms: float = 120.0
     qtc_long_male_ms: float = 450.0
     qtc_long_female_ms: float = 460.0
+    qtc_short_ms: float = 340.0
     axis_left_deg: float = -30.0
     axis_right_deg: float = 90.0
 
@@ -117,6 +118,19 @@ def evaluate_rules(
                 severity=AlertSeverity.WARNING,
             )
         )
+    elif measurements.qtc_ms < thresholds.qtc_short_ms:
+        alerts.append(
+            ClinicalAlert(
+                code="qtc_short",
+                message=(
+                    f"QTc court ({measurements.qtc_ms:.0f} ms, "
+                    f"seuil < {thresholds.qtc_short_ms:.0f} ms) — évoquant un syndrome "
+                    "du QT court, à corréler cliniquement"
+                ),
+                source=AlertSource.RULE,
+                severity=AlertSeverity.WARNING,
+            )
+        )
 
     if measurements.electrical_axis_deg is not None:
         if measurements.electrical_axis_deg < thresholds.axis_left_deg:
@@ -142,7 +156,7 @@ def evaluate_rules(
         alerts.append(
             ClinicalAlert(
                 code="within_normal_limits",
-                message="Fréquence, PR, QRS et QTc dans les normes",
+                message="Fréquence, PR, QRS, QTc et axe dans les normes",
                 source=AlertSource.RULE,
                 severity=AlertSeverity.INFO,
             )

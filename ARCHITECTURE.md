@@ -84,3 +84,26 @@ clinique rapide avant que l'app mobile existe — pas un second produit à
 maintenir. Exclue de la mesure de couverture de tests (`pyproject.toml`,
 `[tool.coverage.run]`) : c'est de la glue d'interface, pas de la
 logique métier.
+
+## Numérisation d'image (`image_digitization.py`) — chantier en cours
+
+Extraction d'un tracé ECG depuis une photo de papier imprimé. Volontairement
+découpé en incréments séparés, chacun validé avant le suivant, plutôt que
+construit d'un bloc :
+
+1. **Fait** : suivi du tracé colonne par colonne sur une image **propre**
+   (fond clair, trait sombre net) — `extract_trace_from_image` /
+   `trace_to_signal`. Validé par un test qui dessine une courbe connue et
+   vérifie que la forme récupérée corrèle à >0.9 avec l'originale.
+2. **Pas encore fait** : détection et retrait de la grille millimétrée,
+   calibration pixels → ms/mV, correction de perspective, segmentation des
+   12 dérivations sur une même page, robustesse au bruit d'une vraie photo
+   (éclairage, angle, papier froissé).
+
+**Ne pas brancher ce module sur le parcours "Scanner via photo" de l'app
+tant que l'étape 2 n'est pas faite** — aujourd'hui ce parcours mobile
+affiche un cas de démonstration, pas une vraie analyse de la photo, et
+c'est délibéré (voir `mobile/lib/screens/scanning_screen.dart`). Le
+brancher prématurément referait exactement l'erreur déjà rencontrée avec
+la délinéation NeuroKit2 : un résultat qui a l'air plausible mais qui est
+silencieusement faux.

@@ -51,11 +51,7 @@ class ReportScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      const Icon(
-                        Icons.monitor_heart_outlined,
-                        color: CardioLensColors.primary,
-                        size: 18,
-                      ),
+                      Image.asset('assets/logo.png', height: 20),
                       const SizedBox(width: 8),
                       const Text(
                         'CardioLens',

@@ -5,6 +5,7 @@ import '../models/ecg_result.dart';
 import '../theme.dart';
 import 'analyzing_screen.dart';
 import 'results_screen.dart';
+import 'scanning_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -13,7 +14,14 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('CardioLens'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset('assets/logo.png', height: 40),
+            const SizedBox(width: 8),
+            const Text('CardioLens'),
+          ],
+        ),
         titleTextStyle: const TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w700,
@@ -42,10 +50,11 @@ class HomeScreen extends StatelessWidget {
           _ImportButton(
             icon: Icons.camera_alt_outlined,
             title: 'Scanner via photo',
-            subtitle: 'Bientôt disponible',
+            subtitle: 'Tracé papier (aperçu du parcours)',
             filled: false,
-            enabled: false,
-            onTap: () {},
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ScanningScreen()),
+            ),
           ),
           const SizedBox(height: 28),
           Row(
@@ -143,66 +152,61 @@ class _ImportButton extends StatelessWidget {
     required this.subtitle,
     required this.filled,
     required this.onTap,
-    this.enabled = true,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final bool filled;
-  final bool enabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final fg = filled ? Colors.white : CardioLensColors.textPrimary;
-    return Opacity(
-      opacity: enabled ? 1 : 0.55,
-      child: Material(
-        color: filled ? CardioLensColors.primary : CardioLensColors.surface,
+    return Material(
+      color: filled ? CardioLensColors.primary : CardioLensColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: enabled ? onTap : null,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: filled
-                ? null
-                : BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: CardioLensColors.border),
-                  ),
-            child: Row(
-              children: [
-                Icon(icon, color: fg, size: 22),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: fg,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 1),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          color: filled
-                              ? Colors.white.withValues(alpha: 0.75)
-                              : CardioLensColors.textMuted,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          decoration: filled
+              ? null
+              : BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: CardioLensColors.border),
                 ),
-              ],
-            ),
+          child: Row(
+            children: [
+              Icon(icon, color: fg, size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: fg,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: filled
+                            ? Colors.white.withValues(alpha: 0.75)
+                            : CardioLensColors.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),

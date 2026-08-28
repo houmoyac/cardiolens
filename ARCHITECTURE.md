@@ -118,10 +118,31 @@ construit d'un bloc :
    canevas plus grand via une transformation connue), puis en vérifiant
    que l'espacement de grille redétecté après correction retombe à ±2px
    de la valeur d'origine.
-5. **Pas encore fait** : robustesse au bruit d'une vraie photo (éclairage
-   variable, papier froissé, grille dont la couleur réelle diffère de
-   l'hypothèse `grid_rgb`, document qui ne se détache pas clairement de
-   son arrière-plan).
+5. **Premier test sur une vraie image (pas synthétique) — enseignements
+   concrets.** Testé sur une image d'ECG 12 dérivations trouvée en ligne
+   (pas une photo de patient, mais un vrai rendu, avec vraie compression
+   JPEG et vraie grille) :
+   - **Confirmé faux** : l'hypothèse de grille rose/rouge. Cette image a
+     une grille **grise** (~240,240,240) — `detect_grid_spacing_px` avec
+     `grid_rgb` par défaut échoue silencieusement (lève l'erreur prévue,
+     donc pas dangereux, mais confirme qu'il faudra détecter la couleur
+     plutôt que la supposer).
+   - **Bug réel trouvé et corrigé** dans `extract_trace_from_image` : une
+     ligne sombre persistante (bordure/grille majeure) à une hauteur fixe
+     attirait le tracé extrait vers elle dans chaque colonne — une simple
+     moyenne des pixels sombres ne distingue pas un élément immobile du
+     vrai tracé qui bouge. Corrigé en excluant d'abord les lignes sombres
+     dans >85% des colonnes (forcément pas le tracé, qui varie), puis en
+     prenant le plus grand amas restant par colonne. Test de non-
+     régression ajouté (`test_extract_trace_ignores_persistent_decoy_line`)
+     avant même de revalider sur la vraie image.
+   - Après correction : le tracé extrait sur cette image réelle correspond
+     visuellement aux vrais complexes QRS (mêmes pics, même rythme) —
+     première validation sur du contenu non synthétique.
+6. **Pas encore fait** : détection automatique de la couleur de grille
+   (actuellement il faut la connaître d'avance), robustesse au bruit d'une
+   vraie photo prise au téléphone (éclairage variable, papier froissé,
+   document qui ne se détache pas clairement de son arrière-plan).
 
 **Hypothèses fortes à garder en tête** — la grille est supposée carrée
 (même espacement horizontal/vertical) et sa couleur doit être connue

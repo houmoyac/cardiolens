@@ -29,24 +29,58 @@ def extract_trace_from_image(
     Returns one y pixel-position per column (the trace's vertical position
     in that column), NaN where no dark pixel was found. Units are pixels,
     not mV/ms — calibration is a separate, not-yet-built step.
+
+    Real ECG images can contain other dark features besides the trace — a
+    bold grid line or a panel border, for instance (found empirically: a
+    persistent dark row at a fixed height was pulling the recovered trace
+    toward it in every column, since a naive "mean of all dark pixels"
+    doesn't distinguish a stationary decoy from the moving trace). Rows
+    that are dark in almost every column are excluded before picking each
+    column's trace position — the trace moves, a border/grid line doesn't.
     """
     if image.ndim == 3:
         gray = np.asarray(Image.fromarray(image).convert("L"), dtype=np.float64)
     else:
         gray = image.astype(np.float64)
 
-    height, width = gray.shape
+    is_dark = gray < dark_threshold
+    persistent_rows = np.where(is_dark.mean(axis=1) > 0.85)[0]
+
+    width = gray.shape[1]
     ys = np.full(width, np.nan)
 
     for x in range(width):
-        dark_rows = np.where(gray[:, x] < dark_threshold)[0]
-        if dark_rows.size == 0:
+        clusters = [
+            c
+            for c in _find_dark_clusters(is_dark[:, x])
+            if not _near_any_row(c[0], persistent_rows)
+        ]
+        if not clusters:
             continue
-        # Centroid of dark pixels in this column — robust to a stroke a few
-        # pixels wide and to antialiasing at the trace's edges.
-        ys[x] = float(np.mean(dark_rows))
+        # The largest remaining cluster — more likely the genuine stroke
+        # than a thin antialiasing sliver.
+        ys[x] = max(clusters, key=lambda c: c[1])[0]
 
     return ys
+
+
+def _find_dark_clusters(is_dark_col: NDArray[np.bool_]) -> list[tuple[float, int]]:
+    """Contiguous runs of True in a 1D boolean array, as (centroid, size)."""
+    clusters: list[tuple[float, int]] = []
+    start: int | None = None
+    for i, dark in enumerate(is_dark_col):
+        if dark and start is None:
+            start = i
+        elif not dark and start is not None:
+            clusters.append(((start + i - 1) / 2.0, i - start))
+            start = None
+    if start is not None:
+        clusters.append(((start + len(is_dark_col) - 1) / 2.0, len(is_dark_col) - start))
+    return clusters
+
+
+def _near_any_row(row: float, rows: NDArray[np.intp], tolerance_px: float = 2.0) -> bool:
+    return bool(rows.size) and bool(np.any(np.abs(rows - row) <= tolerance_px))
 
 
 def trace_to_signal(pixel_trace: NDArray[np.float64]) -> NDArray[np.float64]:

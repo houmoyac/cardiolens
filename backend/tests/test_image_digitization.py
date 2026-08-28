@@ -63,6 +63,35 @@ def test_extract_trace_recovers_known_curve_shape() -> None:
     assert correlation > 0.9
 
 
+def test_extract_trace_ignores_persistent_decoy_line() -> None:
+    """Regression test for a real bug found on a real (non-synthetic) ECG
+    image: a bold horizontal line/border at a fixed row was pulling the
+    recovered trace toward it in every column. A decoy line here plays
+    that same role — the trace, which moves, must still be recovered
+    correctly despite a stationary dark row cutting across the whole
+    image."""
+    x = np.linspace(0, 4 * np.pi, 400)
+    known_shape = np.sin(x)
+    image = _render_curve_as_image(known_shape).copy()
+
+    decoy_row = 20
+    image[decoy_row, :] = (0, 0, 0)
+
+    pixel_trace = extract_trace_from_image(image)
+    recovered = trace_to_signal(pixel_trace)
+
+    normalized_recovered = (recovered - recovered.mean()) / recovered.std()
+    normalized_known = (known_shape - known_shape.mean()) / known_shape.std()
+    resampled_known = np.interp(
+        np.linspace(0, 1, len(normalized_recovered)),
+        np.linspace(0, 1, len(normalized_known)),
+        normalized_known,
+    )
+
+    correlation = np.corrcoef(normalized_recovered, resampled_known)[0, 1]
+    assert correlation > 0.9
+
+
 def test_extract_trace_returns_nan_on_blank_columns() -> None:
     blank = np.full((100, 100, 3), 255, dtype=np.uint8)
     pixel_trace = extract_trace_from_image(blank)

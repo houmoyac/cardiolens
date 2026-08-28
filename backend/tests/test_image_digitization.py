@@ -16,6 +16,7 @@ from cardiolens.image_digitization import (
     calibrate_trace,
     detect_grid_spacing_px,
     extract_trace_from_image,
+    segment_grid_panels,
     trace_to_signal,
 )
 
@@ -122,3 +123,75 @@ def test_calibrate_trace_produces_plausible_ecg_units() -> None:
 def test_calibrate_trace_rejects_non_positive_spacing() -> None:
     with pytest.raises(GridDetectionError):
         calibrate_trace(np.array([1.0, 2.0]), grid_spacing_px=0.0)
+
+
+def _render_page_with_labeled_panels(
+    rows: int, cols: int, panel_w: int = 200, panel_h: int = 100
+) -> tuple[np.ndarray, dict[tuple[int, int], np.ndarray]]:
+    """A synthetic full page: rows x cols panels, each with a distinct
+    sine curve (same gentle frequency, different phase — the extraction
+    algorithm only follows single-valued-per-column curves reliably, so
+    frequency stays representative of an ECG trace, not stressed to its
+    aliasing limit) so a panel's extracted content can be matched back to
+    the curve it was supposed to contain."""
+    page = np.full((rows * panel_h, cols * panel_w, 3), 255, dtype=np.uint8)
+    expected: dict[tuple[int, int], np.ndarray] = {}
+    panel_index = 0
+
+    for r in range(rows):
+        for c in range(cols):
+            phase = panel_index * 0.7  # distinct shape per panel, same frequency
+            x = np.linspace(0, 2 * np.pi, panel_w)
+            curve = np.sin(2 * x + phase) * (panel_h * 0.3)
+            baseline = panel_h / 2
+            fig, ax = plt.subplots(
+                figsize=(panel_w / 100, panel_h / 100), dpi=100
+            )
+            ax.plot(curve, color="black", linewidth=2)
+            ax.set_xlim(0, panel_w)
+            ax.set_ylim(-panel_h / 2, panel_h / 2)
+            ax.axis("off")
+            fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png", facecolor="white")
+            plt.close(fig)
+            buf.seek(0)
+            panel_img = np.asarray(
+                Image.open(buf).convert("RGB").resize((panel_w, panel_h))
+            )
+            page[r * panel_h : (r + 1) * panel_h, c * panel_w : (c + 1) * panel_w] = (
+                panel_img
+            )
+            expected[(r, c)] = curve + baseline
+            panel_index += 1
+
+    return page, expected
+
+
+def test_segment_grid_panels_isolates_the_right_curve_per_cell() -> None:
+    rows, cols = 3, 2
+    page, expected = _render_page_with_labeled_panels(rows, cols)
+
+    panels = segment_grid_panels(page, rows=rows, cols=cols)
+
+    assert len(panels) == rows
+    assert all(len(row) == cols for row in panels)
+
+    for r in range(rows):
+        for c in range(cols):
+            pixel_trace = extract_trace_from_image(panels[r][c])
+            recovered = trace_to_signal(pixel_trace)
+
+            expected_curve = expected[(r, c)]
+            normalized_recovered = (recovered - recovered.mean()) / recovered.std()
+            normalized_expected = (
+                expected_curve - expected_curve.mean()
+            ) / expected_curve.std()
+            resampled_expected = np.interp(
+                np.linspace(0, 1, len(normalized_recovered)),
+                np.linspace(0, 1, len(normalized_expected)),
+                normalized_expected,
+            )
+
+            correlation = np.corrcoef(normalized_recovered, resampled_expected)[0, 1]
+            assert correlation > 0.85, f"panel ({r},{c}) correlation={correlation}"

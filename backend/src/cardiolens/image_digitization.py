@@ -138,3 +138,54 @@ def calibrate_trace(
 
     signal_mv = pixel_trace / px_per_mm / mm_per_mv
     return signal_mv, sampling_rate_hz
+
+
+def segment_grid_panels(
+    image: NDArray[np.uint8],
+    rows: int,
+    cols: int,
+    search_margin_frac: float = 0.15,
+) -> list[list[NDArray[np.uint8]]]:
+    """Split a full ECG page into `rows` x `cols` single-lead panels.
+
+    Assumes the standard clinical layout — leads arranged in a regular
+    grid (typically 6x2: I/II/III/aVR/aVL/aVF | V1-V6). Naive equal
+    division would misalign panels whose margins aren't pixel-identical,
+    so each boundary is refined by searching, within a margin around its
+    naive position, for the row/column with the least ink — the real gap
+    between panels. Still assumes a clean, axis-aligned page: no
+    perspective correction happens here.
+    """
+    if image.ndim == 3:
+        gray = np.asarray(Image.fromarray(image).convert("L"), dtype=np.float64)
+    else:
+        gray = image.astype(np.float64)
+    ink = 255.0 - gray  # higher value = more ink (trace or grid) at that pixel
+
+    row_bounds = _refine_grid_boundaries(ink.sum(axis=1), rows, search_margin_frac)
+    col_bounds = _refine_grid_boundaries(ink.sum(axis=0), cols, search_margin_frac)
+
+    return [
+        [
+            image[row_bounds[r] : row_bounds[r + 1], col_bounds[c] : col_bounds[c + 1]]
+            for c in range(cols)
+        ]
+        for r in range(rows)
+    ]
+
+
+def _refine_grid_boundaries(
+    profile: NDArray[np.float64], count: int, search_margin_frac: float
+) -> list[int]:
+    n = len(profile)
+    naive = [round(i * n / count) for i in range(count + 1)]
+
+    refined = [naive[0]]
+    for i in range(1, count):
+        margin = max(1, int(n / count * search_margin_frac))
+        lo, hi = max(0, naive[i] - margin), min(n, naive[i] + margin)
+        window = profile[lo:hi]
+        refined.append(lo + int(np.argmin(window)))
+    refined.append(naive[-1])
+
+    return refined

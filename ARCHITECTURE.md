@@ -100,15 +100,23 @@ construit d'un bloc :
    pixels → ms/mV à partir de cet espacement + des standards papier ECG
    (25 mm/s, 10 mm/mV) — `detect_grid_spacing_px` / `calibrate_trace`.
    Validé sur une grille synthétique d'espacement connu (retrouvé à ±1px).
-3. **Pas encore fait** : correction de perspective (photo prise de biais),
-   segmentation des 12 dérivations sur une même page, robustesse au bruit
-   d'une vraie photo (éclairage variable, papier froissé, grille dont la
-   couleur réelle diffère de l'hypothèse `grid_rgb`).
+3. **Fait** : segmentation d'une page complète en panneaux par dérivation
+   (grille rows×cols, typiquement 6×2) — `segment_grid_panels`. Chaque
+   frontière naïve (division égale) est affinée en cherchant, dans une
+   marge autour d'elle, la ligne/colonne la moins encrée — le vrai espace
+   entre panneaux plutôt qu'une division pixel-parfaite supposée. Validé
+   sur une page synthétique 3×2 à courbes distinctes par case (corrélation
+   >0.85 entre chaque case extraite et la courbe qui lui était destinée).
+4. **Pas encore fait** : correction de perspective (photo prise de biais),
+   robustesse au bruit d'une vraie photo (éclairage variable, papier
+   froissé, grille dont la couleur réelle diffère de l'hypothèse
+   `grid_rgb`).
 
 **Hypothèses fortes à garder en tête** — la grille est supposée carrée
-(même espacement horizontal/vertical) et sa couleur doit être connue
-d'avance (`grid_rgb`, un rose/rouge par défaut) ; aucune de ces deux
-hypothèses n'a encore été vérifiée sur une vraie photo, seulement sur du
+(même espacement horizontal/vertical), sa couleur doit être connue
+d'avance (`grid_rgb`, un rose/rouge par défaut), et la page est supposée
+déjà droite/alignée (`segment_grid_panels` ne corrige aucune perspective) ;
+aucune de ces hypothèses n'a encore été vérifiée sur une vraie photo, seulement sur du
 synthétique.
 
 **Ne pas brancher ce module sur le parcours "Scanner via photo" de l'app

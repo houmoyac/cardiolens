@@ -193,3 +193,46 @@ c'est délibéré (voir `mobile/lib/screens/scanning_screen.dart`). Le
 brancher prématurément referait exactement l'erreur déjà rencontrée avec
 la délinéation NeuroKit2 : un résultat qui a l'air plausible mais qui est
 silencieusement faux.
+
+## Détection IA — premier modèle (fibrillation atriale)
+
+Premier composant `AlertSource.AI` réellement branché (jusqu'ici la
+section "IA" de l'interface était vide, prête mais sans modèle derrière).
+
+**Approche** : features HRV classiques (SDNN, RMSSD, pNN50, coefficient de
+variation RR) calculées à partir des mêmes pics R déjà validés dans
+`signal_processing.py`, puis régression logistique — volontairement pas
+un modèle profond sur signal brut. Un physicien peut se voir expliquer
+exactement ce que mesure chaque feature ; une boîte noire, non. Voir
+`afib_features.py`, `afib_detection.py`, `scripts/train_afib_model.py`.
+
+**Limite à ne jamais perdre de vue** : PTB-XL ne contient que **48
+enregistrements** avec un diagnostic de fibrillation atriale confirmé à
+100% (c'est un dataset généraliste, pas centré sur les arythmies). Le
+modèle entraîné dessus atteint une AUC ~0.99 en validation croisée — un
+chiffre **optimiste**, pas un chiffre validé cliniquement : l'échantillon
+est petit, et composé uniquement de cas "francs" (diagnostic confirmé à
+100%, aucun cas limite comme une FA paroxystique ou de simples
+extrasystoles fréquentes qui pourraient tromper le modèle). C'est un
+signal encourageant que l'approche (irrégularité RR) va dans le bon sens
+— cohérent avec la littérature publiée sur la détection de FA par HRV —
+pas une preuve de fiabilité clinique.
+
+**Comment cette limite est reflétée dans le produit**, pas juste dans un
+commentaire de code :
+- Toujours `AlertSource.AI`, jamais mélangé aux alertes RÈGLE
+- Toujours accompagné d'un score de confiance (`confidence`)
+- Message explicite "prédiction algorithmique, à corréler cliniquement"
+- Seuil de décision (`AFIB_ALERT_THRESHOLD` dans `api.py`) resté à la
+  valeur par défaut du classifieur (0.5), pas retouché pour améliorer
+  artificiellement des métriques sur un si petit échantillon
+
+**Robustesse** : si la prédiction IA échoue pour une raison quelconque
+(modèle introuvable, erreur interne), `api.py` l'avale et renvoie quand
+même les alertes RÈGLE — la couche IA ne doit jamais casser la couche
+règles, qui reste la plus fiable.
+
+**Prochaine étape, pas encore faite** : élargir le jeu d'entraînement au
+maximum de cas AFIB disponibles ailleurs (PTB-XL seul est trop petit pour
+une vraie confiance), et valider sur des cas limites (FA paroxystique,
+extrasystoles fréquentes) avant d'envisager un usage au-delà du POC.

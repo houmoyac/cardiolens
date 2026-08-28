@@ -12,6 +12,8 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "streamlit>=1.36",
     "opencv-python-headless>=5.0.0.93",
+    "scikit-learn>=1.4",
+    "joblib>=1.4",
 ]
 
 [dependency-groups]
@@ -23,6 +25,12 @@ dev = [
     "pip-audit>=2.7",
     "httpx>=0.27",
     "setuptools>=83.0.0",
+]
+# Only needed to re-run scripts/train_afib_model.py (downloads PTB-XL via
+# wfdb) — not a runtime dependency of the app, kept out of the main group
+# so the API/webapp/mobile backend doesn't carry it.
+train = [
+    "wfdb>=4.1",
 ]
 
 [build-system]

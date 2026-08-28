@@ -143,41 +143,34 @@ else:
                 alert_html(a) for a in alerts if a.source == AlertSource.RULE
             )
 
-            card_html = f"""
-            <div class="cl-card">
-                <div class="cl-chips">
-                    <div class="cl-chip">
-                        <div class="cl-chip-label">FC</div>
-                        <div class="cl-chip-value">{measurements.heart_rate_bpm:.0f} bpm</div>
-                    </div>
-                    <div class="cl-chip">
-                        <div class="cl-chip-label">PR</div>
-                        <div class="cl-chip-value">{measurements.pr_interval_ms:.0f} ms</div>
-                    </div>
-                    <div class="cl-chip{" warn" if qrs_warn else ""}">
-                        <div class="cl-chip-label">QRS</div>
-                        <div class="cl-chip-value">{measurements.qrs_duration_ms:.0f} ms</div>
-                    </div>
-                    <div class="cl-chip{" warn" if qtc_warn else ""}">
-                        <div class="cl-chip-label">QTC</div>
-                        <div class="cl-chip-value">{measurements.qtc_ms:.0f} ms</div>
-                    </div>
-                </div>
-
-                <div class="cl-section-label">
-                    <span class="cl-badge rule">RÈGLE</span>
-                    <span class="cl-section-title">Alertes cliniques — mesures directes</span>
-                </div>
-                {rule_alerts_html}
-
-                <div class="cl-section-label">
-                    <span class="cl-badge ai">IA</span>
-                    <span class="cl-section-title">Détection algorithmique</span>
-                </div>
-                <div class="cl-alert info">
-                    Aucun modèle IA branché pour l'instant — cette section apparaîtra une fois le
-                    composant de détection (phase 2) ajouté.
-                </div>
-            </div>
-            """
+            # Built as a single unindented line — Markdown treats a line that
+            # starts with 4+ spaces as a code block, which silently turned
+            # this HTML into literal text when it was pretty-printed.
+            card_html = (
+                '<div class="cl-card">'
+                '<div class="cl-chips">'
+                '<div class="cl-chip"><div class="cl-chip-label">FC</div>'
+                f'<div class="cl-chip-value">{measurements.heart_rate_bpm:.0f} bpm</div></div>'
+                '<div class="cl-chip"><div class="cl-chip-label">PR</div>'
+                f'<div class="cl-chip-value">{measurements.pr_interval_ms:.0f} ms</div></div>'
+                f'<div class="cl-chip{" warn" if qrs_warn else ""}">'
+                '<div class="cl-chip-label">QRS</div>'
+                f'<div class="cl-chip-value">{measurements.qrs_duration_ms:.0f} ms</div></div>'
+                f'<div class="cl-chip{" warn" if qtc_warn else ""}">'
+                '<div class="cl-chip-label">QTC</div>'
+                f'<div class="cl-chip-value">{measurements.qtc_ms:.0f} ms</div></div>'
+                "</div>"
+                '<div class="cl-section-label">'
+                '<span class="cl-badge rule">RÈGLE</span>'
+                '<span class="cl-section-title">Alertes cliniques — mesures directes</span>'
+                "</div>"
+                f"{rule_alerts_html}"
+                '<div class="cl-section-label">'
+                '<span class="cl-badge ai">IA</span>'
+                '<span class="cl-section-title">Détection algorithmique</span>'
+                "</div>"
+                '<div class="cl-alert info">Aucun modèle IA branché pour l\'instant — cette '
+                "section apparaîtra une fois le composant de détection (phase 2) ajouté.</div>"
+                "</div>"
+            )
             st.markdown(card_html, unsafe_allow_html=True)

@@ -1,0 +1,86 @@
+# Architecture
+
+Ce document explique les décisions structurantes du projet — le
+**pourquoi**, pas le **quoi** (le code parle pour lui-même). À mettre à
+jour quand une de ces décisions change.
+
+## Principe directeur
+
+CardioLens est une **aide à la décision**, jamais un diagnostic
+autonome. Cette contrainte n'est pas qu'un avertissement affiché à
+l'écran — elle façonne l'architecture :
+
+- Chaque alerte porte sa **source** (`AlertSource.RULE` ou `AlertSource.AI`)
+  et ne se mélange jamais avec les autres dans l'affichage.
+- Une alerte "règle" est **toujours explicable** : elle vient d'une
+  mesure directe comparée à un seuil publié, jamais d'une boîte noire.
+- Le pipeline **échoue bruyamment** (`ECGProcessingError`) plutôt que de
+  renvoyer une mesure approximative en silence — un chiffre faux mais
+  plausible est plus dangereux qu'une erreur explicite.
+
+## Pourquoi les règles cliniques avant le ML
+
+Le moteur de règles (`rules.py`) couvre les mesures directes (FC, PR,
+QRS, QTc, axe) avec des seuils publiés (littérature ESC/AHA). Aucune
+donnée d'entraînement n'est nécessaire, le comportement est entièrement
+explicable, et c'est suffisant pour valider le concept avec un médecin
+avant d'investir dans du ML.
+
+Le ML (pas encore implémenté) est prévu comme un **complément**, pas un
+remplacement — pour les cas que des seuils simples ne peuvent pas
+capturer (fibrillation atriale, ischémie). Voir `AlertSource.AI` dans
+`models.py`, déjà prévu dans le modèle de données.
+
+## Pourquoi les seuils sont paramétrables (`GuidelineThresholds`)
+
+Les seuils cliniques ne sont pas universels : l'ESC (Europe) et l'AHA
+(États-Unis) publient des recommandations légèrement différentes, et la
+formule de correction du QT varie (Bazett, Fridericia...). Coder les
+seuils en dur aurait rendu toute expansion à un autre pays/référentiel
+coûteuse. `GuidelineThresholds` est une donnée, pas de la logique — un
+nouveau référentiel est un nouveau profil, pas une réécriture.
+
+## Limite actuelle : mono-dérivation
+
+`measure_ecg` ne traite qu'**une seule dérivation** (DII) pour l'instant.
+C'est une simplification délibérée pour le POC, mais elle a un coût réel :
+
+- L'axe électrique reste `None` — il faut au moins 2 dérivations (I, aVF).
+- Une vraie lecture clinique (ischémie, localisation d'un infarctus)
+  nécessite les 12 dérivations.
+- La délinéation par dérivation unique est plus bruitée qu'un consensus
+  multi-dérivations (voir la méthode `_robust_interval_ms`, qui existe
+  précisément pour compenser ce bruit).
+
+**Ne pas retro-adapter du multi-dérivation sur cette base mono-dérivation
+en bricolage.** Quand le format d'entrée réel (SCP-ECG, 12 dérivations)
+sera intégré, `measure_ecg` doit être repensé pour prendre un
+enregistrement multi-dérivations dès la signature de la fonction.
+
+## Pourquoi `_robust_interval_ms` utilise la médiane, pas la moyenne
+
+Sur de vrais ECG (PTB-XL), la délinéation NeuroKit2 par battement est
+bruitée : quelques battements mal détectés suffisent à fausser une
+simple moyenne (déjà observé : un ECG étiqueté "normal" ressortait avec
+un QRS de 168-208 ms avec la méthode `dwt` + moyenne). La médiane,
+combinée à un rejet des valeurs hors plage physiologique, est robuste à
+ces valeurs aberrantes résiduelles. Voir l'historique git de
+`signal_processing.py` pour le diagnostic complet.
+
+## Statut de `api.py`
+
+Le module FastAPI existe mais n'est **branché à rien** pour l'instant —
+prévu pour l'app mobile, pas encore construite. Il est testé
+(`tests/test_api.py`) pour ne pas devenir du code mort silencieux, mais
+son design n'est pas figé tant que l'app mobile n'impose pas de vraies
+contraintes d'intégration.
+
+## Outil de test web (`webapp.py`)
+
+Interface Streamlit délibérément séparée du reste : elle importe
+directement le package `cardiolens` (mêmes fonctions que l'API), sans
+dupliquer de logique. Son seul rôle est de permettre une validation
+clinique rapide avant que l'app mobile existe — pas un second produit à
+maintenir. Exclue de la mesure de couverture de tests (`pyproject.toml`,
+`[tool.coverage.run]`) : c'est de la glue d'interface, pas de la
+logique métier.

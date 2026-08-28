@@ -20,6 +20,7 @@ jobs:
       - run: uv run ruff check .
       - run: uv run mypy src
       - run: uv run pytest --cov=cardiolens
+      - run: uv run pip-audit
 
   pre-commit:
     runs-on: ubuntu-latest

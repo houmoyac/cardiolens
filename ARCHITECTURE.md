@@ -107,17 +107,29 @@ construit d'un bloc :
    entre panneaux plutôt qu'une division pixel-parfaite supposée. Validé
    sur une page synthétique 3×2 à courbes distinctes par case (corrélation
    >0.85 entre chaque case extraite et la courbe qui lui était destinée).
-4. **Pas encore fait** : correction de perspective (photo prise de biais),
-   robustesse au bruit d'une vraie photo (éclairage variable, papier
-   froissé, grille dont la couleur réelle diffère de l'hypothèse
-   `grid_rgb`).
+4. **Fait** : correction de perspective (photo prise de biais) —
+   `find_document_corners` (détection de contour via OpenCV : Canny +
+   contours + approximation polygonale, avec rejet si le contour n'est pas
+   convexe, pas assez rectangulaire, ou couvre quasiment tout le cadre —
+   ce dernier cas a été un vrai faux positif rencontré sur une image de
+   bruit pur, pas juste une précaution théorique) et `correct_perspective`
+   (transformation homographique vers une page à plat). Validé en
+   simulant une "photo prise de biais" (page synthétique projetée sur un
+   canevas plus grand via une transformation connue), puis en vérifiant
+   que l'espacement de grille redétecté après correction retombe à ±2px
+   de la valeur d'origine.
+5. **Pas encore fait** : robustesse au bruit d'une vraie photo (éclairage
+   variable, papier froissé, grille dont la couleur réelle diffère de
+   l'hypothèse `grid_rgb`, document qui ne se détache pas clairement de
+   son arrière-plan).
 
 **Hypothèses fortes à garder en tête** — la grille est supposée carrée
-(même espacement horizontal/vertical), sa couleur doit être connue
-d'avance (`grid_rgb`, un rose/rouge par défaut), et la page est supposée
-déjà droite/alignée (`segment_grid_panels` ne corrige aucune perspective) ;
-aucune de ces hypothèses n'a encore été vérifiée sur une vraie photo, seulement sur du
-synthétique.
+(même espacement horizontal/vertical) et sa couleur doit être connue
+d'avance (`grid_rgb`, un rose/rouge par défaut) ; aucune des deux n'a
+encore été vérifiée sur une vraie photo, seulement sur du synthétique. La
+détection de contour (`find_document_corners`) suppose aussi que le
+document se distingue nettement de son arrière-plan — pas garanti sur une
+vraie photo (bureau blanc, mauvais éclairage, etc.).
 
 **Ne pas brancher ce module sur le parcours "Scanner via photo" de l'app
 tant que l'étape 2 n'est pas faite** — aujourd'hui ce parcours mobile

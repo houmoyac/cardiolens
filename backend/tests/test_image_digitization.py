@@ -5,6 +5,7 @@ import io
 import matplotlib
 
 matplotlib.use("Agg")
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -12,10 +13,13 @@ from PIL import Image
 
 from cardiolens.image_digitization import (
     GridDetectionError,
+    PerspectiveCorrectionError,
     TraceExtractionError,
     calibrate_trace,
+    correct_perspective,
     detect_grid_spacing_px,
     extract_trace_from_image,
+    find_document_corners,
     segment_grid_panels,
     trace_to_signal,
 )
@@ -195,3 +199,74 @@ def test_segment_grid_panels_isolates_the_right_curve_per_cell() -> None:
 
             correlation = np.corrcoef(normalized_recovered, resampled_expected)[0, 1]
             assert correlation > 0.85, f"panel ({r},{c}) correlation={correlation}"
+
+
+def _make_straight_page_with_grid(
+    page_w: int = 300, page_h: int = 200, spacing_px: int = 20, border_px: int = 6
+) -> np.ndarray:
+    page = np.full((page_h, page_w, 3), 255, dtype=np.uint8)
+    grid_color = (255, 150, 150)
+    for x in range(0, page_w, spacing_px):
+        page[:, x] = grid_color
+    for y in range(0, page_h, spacing_px):
+        page[y, :] = grid_color
+    # A solid dark border makes the document's edges detectable by Canny —
+    # a real printed ECG report typically has a similarly clear frame/edge
+    # against whatever background the photo was taken on.
+    page[:border_px, :] = (20, 20, 20)
+    page[-border_px:, :] = (20, 20, 20)
+    page[:, :border_px] = (20, 20, 20)
+    page[:, -border_px:] = (20, 20, 20)
+    return page
+
+
+def _warp_onto_skewed_canvas(
+    page: np.ndarray, canvas_size: tuple[int, int], skewed_corners: np.ndarray
+) -> np.ndarray:
+    """Simulate a photo taken at an angle: project a straight page onto a
+    larger canvas at the given (already-skewed) corner positions."""
+    page_h, page_w = page.shape[:2]
+    src = np.array(
+        [[0, 0], [page_w - 1, 0], [page_w - 1, page_h - 1], [0, page_h - 1]],
+        dtype=np.float32,
+    )
+    transform = cv2.getPerspectiveTransform(src, skewed_corners.astype(np.float32))
+    return cv2.warpPerspective(
+        page, transform, canvas_size, borderValue=(120, 120, 120)
+    )
+
+
+def test_find_and_correct_perspective_recovers_known_grid_spacing() -> None:
+    known_spacing = 20
+    page = _make_straight_page_with_grid(spacing_px=known_spacing)
+    page_h, page_w = page.shape[:2]
+
+    # A plausible "photographed at an angle" skew: corners pushed inward by
+    # different amounts, well within a larger canvas.
+    skewed_corners = np.array(
+        [[40, 30], [page_w + 15, 10], [page_w - 10, page_h + 20], [20, page_h - 5]],
+        dtype=np.float64,
+    )
+    canvas = _warp_onto_skewed_canvas(
+        page, (page_w + 80, page_h + 80), skewed_corners
+    )
+
+    detected_corners = find_document_corners(canvas)
+    # Corners should be close to where we actually placed them (order may
+    # start from a different point, so compare as sets via nearest-match).
+    for corner in skewed_corners:
+        nearest_dist = np.min(
+            np.linalg.norm(detected_corners - corner, axis=1)
+        )
+        assert nearest_dist < 15, f"corner {corner} not matched, dist={nearest_dist}"
+
+    corrected = correct_perspective(canvas, detected_corners, (page_w, page_h))
+    recovered_spacing = detect_grid_spacing_px(corrected)
+
+    assert abs(recovered_spacing - known_spacing) <= 2
+
+
+def test_find_document_corners_rejects_image_with_no_clear_document() -> None:
+    noise = np.random.default_rng(0).integers(0, 255, (200, 200, 3), dtype=np.uint8)
+    with pytest.raises(PerspectiveCorrectionError):
+        find_document_corners(noise)

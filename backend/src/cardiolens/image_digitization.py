@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import cv2
 import numpy as np
 from numpy.typing import NDArray
 from PIL import Image
@@ -189,3 +190,109 @@ def _refine_grid_boundaries(
     refined.append(naive[-1])
 
     return refined
+
+
+class PerspectiveCorrectionError(RuntimeError):
+    """Raised when no plausible document quadrilateral can be found — never
+    guess corners, since a wrong perspective transform distorts the whole
+    page's geometry (and therefore every calibration built on it) in a way
+    that looks like a normal photo, not an obvious failure."""
+
+
+def find_document_corners(image: NDArray[np.uint8]) -> NDArray[np.float64]:
+    """Locate the four corners of the (roughly rectangular) document in a
+    photo, assuming it stands out against its background — the strongest
+    edge contour in the image. Returns corners ordered
+    [top-left, top-right, bottom-right, bottom-left].
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) if image.ndim == 3 else image
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blurred, 50, 150)
+    edges = cv2.dilate(edges, np.ones((5, 5), np.uint8), iterations=1)
+
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        raise PerspectiveCorrectionError(
+            "Aucun contour de document détecté dans l'image."
+        )
+
+    largest = max(contours, key=cv2.contourArea)
+    perimeter = cv2.arcLength(largest, True)
+    approx = cv2.approxPolyDP(largest, 0.02 * perimeter, True)
+
+    if len(approx) != 4:
+        raise PerspectiveCorrectionError(
+            f"Le plus grand contour a {len(approx)} coins, pas 4 — le "
+            "document n'est probablement pas clairement isolé du fond."
+        )
+    if not cv2.isContourConvex(approx):
+        raise PerspectiveCorrectionError(
+            "Le contour détecté n'est pas convexe — probablement du bruit, "
+            "pas un vrai contour de document."
+        )
+
+    # A genuine document edge is close to its own bounding rectangle; a
+    # jagged blob from image noise generally isn't, even if it happens to
+    # approximate to 4 points. Rejects exactly the noise-image false
+    # positive this check exists for.
+    _, _, bbox_w, bbox_h = cv2.boundingRect(approx)
+    extent = cv2.contourArea(approx) / (bbox_w * bbox_h)
+    if extent < 0.7:
+        raise PerspectiveCorrectionError(
+            f"Le contour détecté ne remplit que {extent:.0%} de son "
+            "rectangle englobant — pas assez rectangulaire pour être un "
+            "document."
+        )
+
+    # A contour spanning almost the entire frame is usually a sign nothing
+    # real was isolated (dense edge noise merges into one blob touching
+    # every border) rather than a genuine photographed document, which
+    # normally leaves some background margin visible.
+    image_area = gray.shape[0] * gray.shape[1]
+    if (bbox_w * bbox_h) > 0.95 * image_area:
+        raise PerspectiveCorrectionError(
+            "Le contour détecté couvre la quasi-totalité de l'image — "
+            "probablement pas un document isolé de son fond."
+        )
+
+    return _order_corners(approx.reshape(4, 2).astype(np.float64))
+
+
+def _order_corners(corners: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Order 4 arbitrary corner points as
+    [top-left, top-right, bottom-right, bottom-left].
+
+    The standard sum/difference trick (not angle sorting, which is easy to
+    get backwards in image coordinates where y grows downward): the
+    top-left point has the smallest x+y, bottom-right the largest; the
+    top-right point has the smallest y-x, bottom-left the largest.
+    """
+    s = corners.sum(axis=1)
+    diff = corners[:, 1] - corners[:, 0]
+
+    top_left = corners[np.argmin(s)]
+    bottom_right = corners[np.argmax(s)]
+    top_right = corners[np.argmin(diff)]
+    bottom_left = corners[np.argmax(diff)]
+
+    return np.array([top_left, top_right, bottom_right, bottom_left])
+
+
+def correct_perspective(
+    image: NDArray[np.uint8],
+    corners: NDArray[np.float64],
+    output_size: tuple[int, int],
+) -> NDArray[np.uint8]:
+    """Warp the document defined by `corners` (ordered as returned by
+    `find_document_corners`) to a flat, axis-aligned `output_size`
+    (width, height) image."""
+    width, height = output_size
+    destination = np.array(
+        [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]],
+        dtype=np.float64,
+    )
+    transform = cv2.getPerspectiveTransform(
+        corners.astype(np.float32), destination.astype(np.float32)
+    )
+    warped = cv2.warpPerspective(image, transform, (width, height))
+    return warped.astype(np.uint8)

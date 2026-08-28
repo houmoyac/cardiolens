@@ -17,6 +17,34 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
+/// Thrown by [ApiClient.fetchMe] specifically on a 401 — distinguished from
+/// [ApiException] so callers (AuthService.restoreSession) can tell "the
+/// token is genuinely invalid, log out" apart from "the network is just
+/// unreachable right now, keep the cached session".
+class AuthTokenInvalidException implements Exception {}
+
+class AuthUser {
+  const AuthUser({required this.id, required this.email, required this.fullName});
+
+  final int id;
+  final String email;
+  final String fullName;
+
+  factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
+    id: json['id'] as int,
+    email: json['email'] as String,
+    fullName: json['full_name'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'id': id, 'email': email, 'full_name': fullName};
+}
+
+class AuthSession {
+  const AuthSession({required this.token, required this.user});
+  final String token;
+  final AuthUser user;
+}
+
 class ApiClient {
   ApiClient({required this.baseUrl});
 
@@ -76,6 +104,100 @@ class ApiClient {
       patientLabel: patientLabel,
       dateLabel: dateLabel,
     );
+  }
+
+  Future<AuthUser> register({
+    required String email,
+    required String fullName,
+    required String password,
+  }) async {
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/register'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'email': email,
+              'full_name': fullName,
+              'password': password,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      throw ApiException(
+        "Impossible de joindre le serveur ($baseUrl). Vérifie que le "
+        'backend tourne et que ton téléphone est sur le même réseau WiFi.',
+      );
+    }
+
+    if (response.statusCode == 409) {
+      throw ApiException('Un compte existe déjà avec cet email.');
+    }
+    if (response.statusCode != 201) {
+      throw ApiException(_extractDetail(response) ?? 'Inscription impossible.');
+    }
+    return AuthUser.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<AuthSession> login({required String email, required String password}) async {
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/login'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email, 'password': password}),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      throw ApiException(
+        "Impossible de joindre le serveur ($baseUrl). Vérifie que le "
+        'backend tourne et que ton téléphone est sur le même réseau WiFi.',
+      );
+    }
+
+    if (response.statusCode == 401) {
+      throw ApiException('Email ou mot de passe incorrect.');
+    }
+    if (response.statusCode != 200) {
+      throw ApiException(_extractDetail(response) ?? 'Connexion impossible.');
+    }
+
+    final token = (jsonDecode(response.body) as Map<String, dynamic>)['access_token'] as String;
+    final user = await fetchMe(token);
+    return AuthSession(token: token, user: user);
+  }
+
+  Future<AuthUser> fetchMe(String token) async {
+    final http.Response response;
+    try {
+      response = await http
+          .get(
+            Uri.parse('$baseUrl/auth/me'),
+            headers: {'Authorization': 'Bearer $token'},
+          )
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      throw ApiException("Impossible de joindre le serveur ($baseUrl).");
+    }
+
+    if (response.statusCode == 401) {
+      throw AuthTokenInvalidException();
+    }
+    if (response.statusCode != 200) {
+      throw ApiException('Erreur serveur (${response.statusCode}).');
+    }
+    return AuthUser.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+}
+
+String? _extractDetail(http.Response response) {
+  try {
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return body['detail']?.toString();
+  } catch (_) {
+    return null;
   }
 }
 

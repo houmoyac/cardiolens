@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/ecg_result.dart';
+import '../services/auth_service.dart';
 import '../theme.dart';
 import '../widgets/ecg_metadata_bar.dart';
 import '../widgets/ecg_trace_painter.dart';
@@ -148,9 +149,9 @@ class ReportScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 3),
-                  const Text(
-                    '[Dr. Nom Prénom] — en attente de validation',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  Text(
+                    _validatorLabel(),
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
@@ -179,6 +180,15 @@ class ReportScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// The whole reason authentication exists: this field used to be a free
+  /// text placeholder ("[Dr. Nom Prénom]") that anyone could claim — now it
+  /// names the doctor actually logged in on this phone.
+  String _validatorLabel() {
+    final doctor = AuthService.instance.currentUser;
+    if (doctor == null) return '[Dr. Nom Prénom] — en attente de validation';
+    return '${doctor.fullName} — en attente de validation';
   }
 
   void _showTodoSnack(BuildContext context) {

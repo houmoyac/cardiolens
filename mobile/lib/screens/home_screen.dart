@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../data/sample_cases.dart';
 import '../models/ecg_result.dart';
+import '../services/auth_service.dart';
 import '../theme.dart';
 import 'analyzing_screen.dart';
+import 'login_screen.dart';
 import 'results_screen.dart';
 import 'scanning_screen.dart';
 
@@ -27,6 +29,34 @@ class HomeScreen extends StatelessWidget {
           fontWeight: FontWeight.w700,
           color: CardioLensColors.textPrimary,
         ),
+        actions: [
+          PopupMenuButton<_AccountAction>(
+            icon: const Icon(
+              Icons.account_circle_outlined,
+              color: CardioLensColors.textSecondary,
+            ),
+            onSelected: (action) {
+              if (action == _AccountAction.logout) _logout(context);
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem<_AccountAction>(
+                enabled: false,
+                child: Text(
+                  AuthService.instance.currentUser?.fullName ?? '',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: CardioLensColors.textPrimary,
+                  ),
+                ),
+              ),
+              const PopupMenuItem<_AccountAction>(
+                value: _AccountAction.logout,
+                child: Text('Se déconnecter'),
+              ),
+            ],
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
@@ -143,7 +173,18 @@ class HomeScreen extends StatelessWidget {
       MaterialPageRoute(builder: (_) => AnalyzingScreen(resultCase: demoCase)),
     );
   }
+
+  Future<void> _logout(BuildContext context) async {
+    await AuthService.instance.logout();
+    if (!context.mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
 }
+
+enum _AccountAction { logout }
 
 class _ImportButton extends StatelessWidget {
   const _ImportButton({

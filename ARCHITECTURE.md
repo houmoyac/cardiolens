@@ -247,6 +247,21 @@ construit d'un bloc :
     validation soignée referait exactement l'erreur du premier correctif
     d'étiquette (retiré ci-dessus) : un changement qui a l'air d'une
     amélioration mais casse autre chose ailleurs.
+
+    **Tentative de seuil adaptatif — abandonnée, documentée pour ne pas
+    la retenter à l'identique.** Essayé, sur l'image ci-dessus, trois
+    méthodes standard pour remplacer le seuil fixe 128 par quelque chose
+    de calculé depuis l'image : la méthode d'Otsu (seuil = 120, pire que
+    128 : 322/603 colonnes), Otsu sur une version floutée (seuil = 90,
+    même résultat), et un seuillage adaptatif local
+    (`cv2.adaptiveThreshold`). Aucune ne s'approche des 471/603 colonnes
+    obtenues avec la valeur 190 trouvée manuellement en balayant les
+    seuils un par un — ce qui veut dire que 190 n'est pas une vraie
+    valeur "optimale découverte", juste ce qui a le mieux marché sur
+    **cette** image précise. Livrer un seuil "adaptatif" calé sur une
+    seule image réelle serait un réglage déguisé en méthode, pas une
+    vraie solution — retenu comme non fait plutôt que comme un correctif
+    qui semble marcher mais généralise mal.
 12. **Pas encore fait** : le reste de la robustesse au bruit d'une vraie
     photo prise au téléphone (document qui ne se détache pas clairement
     de son arrière-plan, cadrage/perspective sur une vraie photo plutôt

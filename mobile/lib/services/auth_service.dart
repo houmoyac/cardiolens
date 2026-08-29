@@ -27,6 +27,12 @@ class AuthService {
   AuthUser? currentUser;
   String? _token;
 
+  // Bumped on every successful upload/delete — appended to logoUrl as a
+  // cache-busting query param. Without this, Image.network kept showing
+  // the OLD logo after "Changer le logo": the URL never changed, so
+  // Flutter's image cache (and any HTTP cache) served the stale bytes.
+  int _logoVersion = 0;
+
   String? get token => _token;
   bool get isLoggedIn => currentUser != null;
 
@@ -130,6 +136,7 @@ class AuthService {
     if (token == null) throw StateError('Not logged in.');
     final user = await ApiClient(baseUrl: apiBaseUrl).uploadLogo(token: token, bytes: bytes);
     currentUser = user;
+    _logoVersion++;
     await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
   }
 
@@ -146,6 +153,7 @@ class AuthService {
         lastName: current.lastName,
         workplace: current.workplace,
       );
+      _logoVersion++;
       await _storage.write(key: _userKey, value: jsonEncode(currentUser!.toJson()));
     }
   }
@@ -153,8 +161,10 @@ class AuthService {
   /// URL for the doctor's uploaded workplace logo — the report/home screen
   /// pass this to Image.network with an Authorization header (the route is
   /// authenticated, same as any other /auth/me/* endpoint). Null when no
-  /// logo has been uploaded.
-  String? get logoUrl => (currentUser?.hasLogo ?? false) ? '$apiBaseUrl/auth/me/logo' : null;
+  /// logo has been uploaded. Carries a cache-busting `?v=` so a changed
+  /// logo doesn't keep showing the previous one from Flutter's image cache.
+  String? get logoUrl =>
+      (currentUser?.hasLogo ?? false) ? '$apiBaseUrl/auth/me/logo?v=$_logoVersion' : null;
 
   Map<String, String> get authHeaders => _token == null ? {} : {'Authorization': 'Bearer $_token'};
 

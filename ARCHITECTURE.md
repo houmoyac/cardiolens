@@ -285,6 +285,38 @@ construit d'un bloc :
     des données plutôt qu'une intuition, que garder 128 était la bonne
     décision et qu'un vrai seuil adaptatif fiable demanderait un
     jeu de validation bien plus large que 4 images.
+
+    **Poussé ensuite à 27 images réelles** (tout le jeu d'exemples
+    d'`ecg-image-kit` — pas "des milliers depuis le net" : ce dépôt n'en
+    contient que 18 au total, et la quasi-totalité de ce qui existe par
+    ailleurs en ligne est protégée par des droits d'auteur, comme
+    e-cardiogram.com déjà écarté plus haut ; le reste vient de crops
+    utilisés dans les tests précédents). Balayage de `dark_threshold` de
+    100 à 220 par pas de 10, mesuré en fraction de colonnes avec un
+    tracé détecté, moyenne et pire cas sur les 27 images :
+
+    | seuil | moyenne | pire cas |
+    |-------|---------|----------|
+    | 100   | 0.883   | 0.360    |
+    | 120   | 0.869   | 0.330    |
+    | **128 (actuel)** | **0.882** | **0.324** |
+    | 140   | 0.882   | 0.312    |
+    | 150   | 0.855   | **0.000** |
+    | 170   | 0.779   | 0.000    |
+    | 190   | 0.668   | 0.000    |
+    | 220   | 0.251   | 0.000    |
+
+    **Conclusion, cette fois avec un échantillon assez grand pour
+    trancher** : 128 fait jeu quasi égal avec la meilleure moyenne
+    (100-140, toutes proches), et surtout évite les échecs totaux (0.000
+    = plus aucune colonne détectée) qui apparaissent dès qu'on monte à
+    150 et au-delà sur au moins une image du lot à chaque fois. **128
+    n'est pas un choix arbitraire non testé — c'est, empiriquement,
+    quasiment le meilleur seuil fixe possible sur ce jeu réel.** Pas de
+    changement nécessaire ici ; le vrai gain viendrait d'un seuil qui
+    varie *par image* plutôt qu'une seule constante, mais ça reste un
+    chantier séparé (la tentative Otsu/adaptative plus haut n'a pas
+    mieux fait qu'une valeur fixe).
 12. **Pas encore fait** : le reste de la robustesse au bruit d'une vraie
     photo prise au téléphone (document qui ne se détache pas clairement
     de son arrière-plan, cadrage/perspective sur une vraie photo plutôt

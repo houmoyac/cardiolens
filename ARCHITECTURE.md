@@ -269,9 +269,31 @@ commentaire de code :
 même les alertes RÈGLE — la couche IA ne doit jamais casser la couche
 règles, qui reste la plus fiable.
 
-**Prochaine étape, pas encore faite** : valider sur des cas limites (FA
-paroxystique, extrasystoles fréquentes) avant d'envisager un usage
-au-delà du POC.
+**Cas limites — un premier test fait, résultat honnête** (pas la
+validation FA paroxystique idéale, mais la meilleure disponible sans
+dataset dédié — `scripts/evaluate_afib_edge_cases.py`). Aucun dataset de
+FA paroxystique n'est disponible sous une licence utilisable ici (voir
+plus haut pourquoi e-cardiogram.com a été écarté). AFDB offre un proxy
+réel, pas inventé : ses enregistrements continus de plusieurs heures par
+patient contiennent de vraies transitions N↔FA dans le temps. Le script
+compare, avec le même protocole de validation croisée par patient que
+l'entraînement, les fenêtres les plus proches d'une transition de rythme
+(premier/dernier segment extrait) aux fenêtres bien à l'intérieur d'un
+rythme stable.
+
+**Résultat, surprenant** : les fenêtres proches d'une transition ne sont
+pas moins bien classées — légèrement mieux, même (exactitude 0.948 contre
+0.926, AUC 0.977 contre 0.966, sur 746 fenêtres de transition contre 2596
+stables). Pas de preuve de dégradation près des changements de rythme
+dans ce proxy. À interpréter prudemment : "proche d'une transition" dans
+le découpage par annotation ne veut pas forcément dire "contient des
+battements réellement mixtes" — une vraie validation sur de la FA
+paroxystique annotée battement par battement reste la référence, non
+disponible ici.
+
+**Prochaine étape, pas encore faite** : une vraie validation FA
+paroxystique si un dataset licencié adéquat devient disponible ;
+extrasystoles fréquentes, jamais testées spécifiquement.
 
 ## Comptes et authentification
 

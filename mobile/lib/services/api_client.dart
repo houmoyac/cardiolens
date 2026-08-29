@@ -30,6 +30,7 @@ class AuthUser {
     required this.firstName,
     required this.lastName,
     this.workplace,
+    this.professionalTitle,
     this.hasLogo = false,
   });
 
@@ -38,6 +39,7 @@ class AuthUser {
   final String firstName;
   final String lastName;
   final String? workplace;
+  final String? professionalTitle;
   final bool hasLogo;
 
   String get displayName => '$firstName $lastName';
@@ -48,6 +50,7 @@ class AuthUser {
     firstName: json['first_name'] as String,
     lastName: json['last_name'] as String,
     workplace: json['workplace'] as String?,
+    professionalTitle: json['professional_title'] as String?,
     hasLogo: json['has_logo'] as bool? ?? false,
   );
 
@@ -58,6 +61,7 @@ class AuthUser {
     'last_name': lastName,
     'has_logo': hasLogo,
     'workplace': workplace,
+    'professional_title': professionalTitle,
   };
 }
 
@@ -142,6 +146,7 @@ class ApiClient {
     required String lastName,
     required String password,
     String? workplace,
+    String? professionalTitle,
   }) async {
     final http.Response response;
     try {
@@ -155,6 +160,7 @@ class ApiClient {
               'last_name': lastName,
               'password': password,
               'workplace': workplace,
+              'professional_title': professionalTitle,
             }..removeWhere((_, value) => value == null)),
           )
           .timeout(const Duration(seconds: 10));
@@ -225,7 +231,14 @@ class ApiClient {
     return AuthUser.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  Future<AuthUser> updateWorkplace({required String token, String? workplace}) async {
+  /// Updates both fields together (not two separate calls) — the backend
+  /// PATCH replaces whatever isn't sent with null, so a caller that saved
+  /// only `workplace` would silently blank out professional_title.
+  Future<AuthUser> updateProfile({
+    required String token,
+    String? workplace,
+    String? professionalTitle,
+  }) async {
     final http.Response response;
     try {
       response = await http
@@ -235,7 +248,10 @@ class ApiClient {
               'Content-Type': 'application/json',
               'Authorization': 'Bearer $token',
             },
-            body: jsonEncode({'workplace': workplace}),
+            body: jsonEncode({
+              'workplace': workplace,
+              'professional_title': professionalTitle,
+            }),
           )
           .timeout(const Duration(seconds: 10));
     } catch (_) {

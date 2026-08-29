@@ -96,6 +96,22 @@ def test_register_accepts_an_optional_workplace(client: TestClient) -> None:
 def test_register_without_workplace_leaves_it_null(client: TestClient) -> None:
     body = _register(client)
     assert body["workplace"] is None
+    assert body["professional_title"] is None
+
+
+def test_register_accepts_an_optional_professional_title(client: TestClient) -> None:
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "dr.title@example.com",
+            "first_name": "Test",
+            "last_name": "Dupont",
+            "password": "correct-horse-battery",
+            "professional_title": "Maître assistant",
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["professional_title"] == "Maître assistant"
 
 
 def test_update_profile_sets_the_workplace(client: TestClient) -> None:
@@ -114,6 +130,20 @@ def test_update_profile_sets_the_workplace(client: TestClient) -> None:
     # And it sticks — /auth/me reflects the update, not just the PATCH response.
     me_response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me_response.json()["workplace"] == "Hôpital Nord"
+
+
+def test_update_profile_sets_the_professional_title(client: TestClient) -> None:
+    _register(client)
+    token = _login_token(client)
+
+    response = client.patch(
+        "/auth/me",
+        json={"professional_title": "Professeur"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["professional_title"] == "Professeur"
 
 
 def test_update_profile_requires_authentication(client: TestClient) -> None:

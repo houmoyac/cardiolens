@@ -81,6 +81,7 @@ class AuthService {
     required String lastName,
     required String password,
     String? workplace,
+    String? professionalTitle,
   }) async {
     final client = ApiClient(baseUrl: apiBaseUrl);
     await client.register(
@@ -89,6 +90,7 @@ class AuthService {
       lastName: lastName,
       password: password,
       workplace: workplace,
+      professionalTitle: professionalTitle,
     );
     await login(email: email, password: password);
   }
@@ -108,12 +110,14 @@ class AuthService {
     await _storage.delete(key: _userKey);
   }
 
-  Future<void> updateWorkplace(String? workplace) async {
+  Future<void> updateProfile({String? workplace, String? professionalTitle}) async {
     final token = _token;
     if (token == null) throw StateError('Not logged in.');
-    final user = await ApiClient(
-      baseUrl: apiBaseUrl,
-    ).updateWorkplace(token: token, workplace: workplace);
+    final user = await ApiClient(baseUrl: apiBaseUrl).updateProfile(
+      token: token,
+      workplace: workplace,
+      professionalTitle: professionalTitle,
+    );
     currentUser = user;
     await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
   }
@@ -152,6 +156,7 @@ class AuthService {
         firstName: current.firstName,
         lastName: current.lastName,
         workplace: current.workplace,
+        professionalTitle: current.professionalTitle,
       );
       _logoVersion++;
       await _storage.write(key: _userKey, value: jsonEncode(currentUser!.toJson()));

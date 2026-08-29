@@ -18,6 +18,13 @@ class User(SQLModel, table=True):
     first_name: str
     last_name: str
     workplace: str | None = None
+    professional_title: str | None = None
+    """Free text — a fixed enum couldn't cover every real title/grade
+    across countries and institutions (see PROFESSIONAL_TITLE_PRESETS),
+    so the mobile app offers presets plus an "Autre" free-text option,
+    and the backend stores whatever comes through. Never validated
+    against a closed list here — that would just reject a legitimate
+    title the preset list didn't anticipate."""
     hashed_password: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -28,6 +35,7 @@ class UserRegister(BaseModel):
     last_name: str
     password: str
     workplace: str | None = None
+    professional_title: str | None = None
 
 
 class UserLogin(BaseModel):
@@ -41,11 +49,13 @@ class UserPublic(BaseModel):
     first_name: str
     last_name: str
     workplace: str | None
+    professional_title: str | None
     has_logo: bool
 
 
 class UserProfileUpdate(BaseModel):
     workplace: str | None = None
+    professional_title: str | None = None
 
 
 class UserPasswordChange(BaseModel):

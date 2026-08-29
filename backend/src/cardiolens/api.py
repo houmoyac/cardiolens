@@ -75,6 +75,7 @@ def _to_public(user: User) -> UserPublic:
         first_name=user.first_name,
         last_name=user.last_name,
         workplace=user.workplace,
+        professional_title=user.professional_title,
         has_logo=has_logo(user.id),  # type: ignore[arg-type]
     )
 
@@ -90,6 +91,7 @@ def register(payload: UserRegister, session: Session = Depends(get_session)) -> 
         first_name=payload.first_name,
         last_name=payload.last_name,
         workplace=payload.workplace,
+        professional_title=payload.professional_title,
         hashed_password=hash_password(payload.password),
     )
     session.add(user)
@@ -119,6 +121,7 @@ def update_profile(
     session: Session = Depends(get_session),
 ) -> UserPublic:
     current_user.workplace = payload.workplace
+    current_user.professional_title = payload.professional_title
     session.add(current_user)
     session.commit()
     session.refresh(current_user)

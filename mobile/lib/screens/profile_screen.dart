@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../services/auth_service.dart';
 import '../theme.dart';
+import '../widgets/professional_title_field.dart';
 
 /// Reached from the account menu on the home screen. Where the doctor sets
 /// what the report header actually shows for "[Cabinet médical]" and the
@@ -20,12 +21,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final TextEditingController _workplaceController = TextEditingController(
     text: AuthService.instance.currentUser?.workplace ?? '',
   );
+  String? _professionalTitle = AuthService.instance.currentUser?.professionalTitle;
+
   final _passwordFormKey = GlobalKey<FormState>();
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  bool _isSavingWorkplace = false;
+  bool _isSavingInfo = false;
   bool _isUploadingLogo = false;
   bool _isChangingPassword = false;
   String? _error;
@@ -66,23 +69,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _saveWorkplace() async {
+  Future<void> _saveProfessionalInfo() async {
     setState(() {
-      _isSavingWorkplace = true;
+      _isSavingInfo = true;
       _error = null;
     });
     try {
       final trimmed = _workplaceController.text.trim();
-      await AuthService.instance.updateWorkplace(trimmed.isEmpty ? null : trimmed);
+      await AuthService.instance.updateProfile(
+        workplace: trimmed.isEmpty ? null : trimmed,
+        professionalTitle: _professionalTitle,
+      );
       if (!mounted) return;
+      setState(() {});
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Cabinet / hôpital mis à jour.')));
+      ).showSnackBar(const SnackBar(content: Text('Informations mises à jour.')));
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
-      if (mounted) setState(() => _isSavingWorkplace = false);
+      if (mounted) setState(() => _isSavingInfo = false);
     }
   }
 
@@ -139,230 +146,218 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final logoUrl = AuthService.instance.logoUrl;
 
     return Scaffold(
-      backgroundColor: CardioLensColors.background,
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            expandedHeight: 210,
-            backgroundColor: CardioLensColors.primary,
-            surfaceTintColor: Colors.transparent,
-            foregroundColor: Colors.white,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [CardioLensColors.primaryDark, CardioLensColors.primary],
+      appBar: AppBar(title: const Text('Profil', style: TextStyle(fontSize: 15))),
+      body: ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: CardioLensColors.primary.withValues(alpha: 0.08),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      _initials(doctor?.firstName, doctor?.lastName),
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: CardioLensColors.primary,
+                      ),
+                    ),
                   ),
-                ),
-                child: SafeArea(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 76,
-                        height: 76,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.16),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          _initials(doctor?.firstName, doctor?.lastName),
-                          style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        doctor?.displayName ?? '',
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        doctor?.email ?? '',
-                        style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.8)),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(18, 20, 18, 32),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                _SectionCard(
-                  icon: Icons.local_hospital_outlined,
-                  title: 'Cabinet / hôpital',
-                  subtitle: 'Affiché en en-tête des comptes-rendus.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextField(
-                        controller: _workplaceController,
-                        decoration: const InputDecoration(
-                          hintText: 'ex : Cabinet Saint-Michel',
-                          prefixIcon: Icon(Icons.storefront_outlined, size: 20),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _PrimaryActionButton(
-                        label: 'Enregistrer',
-                        isLoading: _isSavingWorkplace,
-                        onPressed: _saveWorkplace,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _SectionCard(
-                  icon: Icons.image_outlined,
-                  title: 'Logo du cabinet / hôpital',
-                  child: Column(
-                    children: [
-                      Center(
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Container(
-                              width: 108,
-                              height: 108,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(20),
-                                color: CardioLensColors.background,
-                                border: Border.all(
-                                  color: CardioLensColors.border,
-                                  width: logoUrl == null ? 1.4 : 1,
-                                  style: BorderStyle.solid,
-                                ),
-                              ),
-                              child: logoUrl == null
-                                  ? const Icon(
-                                      Icons.add_photo_alternate_outlined,
-                                      color: CardioLensColors.textMuted,
-                                      size: 30,
-                                    )
-                                  : ClipRRect(
-                                      borderRadius: BorderRadius.circular(19),
-                                      child: Image.network(
-                                        logoUrl,
-                                        headers: AuthService.instance.authHeaders,
-                                        fit: BoxFit.contain,
-                                        errorBuilder: (_, _, _) => const Icon(
-                                          Icons.broken_image_outlined,
-                                          color: CardioLensColors.textMuted,
-                                        ),
-                                      ),
-                                    ),
-                            ),
-                            if (logoUrl != null)
-                              Positioned(
-                                right: -6,
-                                bottom: -6,
-                                child: _CircleIconButton(
-                                  icon: Icons.delete_outline,
-                                  color: CardioLensColors.alertAccent,
-                                  background: CardioLensColors.alertBg,
-                                  onPressed: _isUploadingLogo ? null : _removeLogo,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _PrimaryActionButton(
-                        label: logoUrl == null ? 'Importer un logo' : 'Changer le logo',
-                        icon: Icons.upload_outlined,
-                        isLoading: _isUploadingLogo,
-                        outlined: true,
-                        onPressed: _pickAndUploadLogo,
-                      ),
-                    ],
-                  ),
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: const TextStyle(color: CardioLensColors.alertAccent, fontSize: 12.5),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                _SectionCard(
-                  icon: Icons.lock_outline,
-                  title: 'Mot de passe',
-                  child: Form(
-                    key: _passwordFormKey,
+                  const SizedBox(width: 14),
+                  Expanded(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        TextFormField(
-                          controller: _currentPasswordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Mot de passe actuel',
-                            prefixIcon: Icon(Icons.lock_open_outlined, size: 20),
-                          ),
-                          validator: (value) =>
-                              (value == null || value.isEmpty) ? 'Requis' : null,
+                        Text(
+                          doctor?.displayName ?? '',
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _newPasswordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Nouveau mot de passe',
-                            prefixIcon: Icon(Icons.key_outlined, size: 20),
-                          ),
-                          validator: (value) => (value == null || value.length < 8)
-                              ? 'Au moins 8 caractères'
-                              : null,
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _confirmPasswordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Confirmer le nouveau mot de passe',
-                            prefixIcon: Icon(Icons.check_circle_outline, size: 20),
-                          ),
-                          validator: (value) => value != _newPasswordController.text
-                              ? 'Les mots de passe ne correspondent pas'
-                              : null,
-                        ),
-                        if (_passwordError != null) ...[
-                          const SizedBox(height: 12),
+                        if ((doctor?.professionalTitle ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 1),
                           Text(
-                            _passwordError!,
+                            doctor!.professionalTitle!,
                             style: const TextStyle(
-                              color: CardioLensColors.alertAccent,
-                              fontSize: 12.5,
+                              fontSize: 12,
+                              color: CardioLensColors.primary,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
-                        const SizedBox(height: 12),
-                        _PrimaryActionButton(
-                          label: 'Changer le mot de passe',
-                          isLoading: _isChangingPassword,
-                          onPressed: _changePassword,
+                        const SizedBox(height: 2),
+                        Text(
+                          doctor?.email ?? '',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: CardioLensColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
                   ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          _SectionCard(
+            title: 'Informations professionnelles',
+            subtitle: 'Affichées en en-tête et en pied des comptes-rendus.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ProfessionalTitleField(
+                  initialValue: _professionalTitle,
+                  onChanged: (value) => _professionalTitle = value,
                 ),
-              ]),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _workplaceController,
+                  decoration: const InputDecoration(
+                    labelText: 'Cabinet / hôpital (optionnel)',
+                    hintText: 'ex : Cabinet Saint-Michel',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _PrimaryActionButton(
+                  label: 'Enregistrer',
+                  isLoading: _isSavingInfo,
+                  onPressed: _saveProfessionalInfo,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          _SectionCard(
+            title: 'Logo du cabinet / hôpital',
+            child: Row(
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    color: CardioLensColors.background,
+                    border: Border.all(color: CardioLensColors.border),
+                  ),
+                  child: logoUrl == null
+                      ? const Icon(
+                          Icons.image_outlined,
+                          color: CardioLensColors.textMuted,
+                          size: 22,
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(9),
+                          child: Image.network(
+                            logoUrl,
+                            headers: AuthService.instance.authHeaders,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, _, _) => const Icon(
+                              Icons.broken_image_outlined,
+                              color: CardioLensColors.textMuted,
+                            ),
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _PrimaryActionButton(
+                        label: logoUrl == null ? 'Importer' : 'Changer',
+                        isLoading: _isUploadingLogo,
+                        outlined: true,
+                        compact: true,
+                        onPressed: _pickAndUploadLogo,
+                      ),
+                      if (logoUrl != null) ...[
+                        const SizedBox(height: 6),
+                        TextButton(
+                          onPressed: _isUploadingLogo ? null : _removeLogo,
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(0, 28),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            foregroundColor: CardioLensColors.alertAccent,
+                          ),
+                          child: const Text('Supprimer', style: TextStyle(fontSize: 12.5)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: const TextStyle(color: CardioLensColors.alertAccent, fontSize: 12.5),
+            ),
+          ],
+          const SizedBox(height: 14),
+          _SectionCard(
+            title: 'Mot de passe',
+            child: Form(
+              key: _passwordFormKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextFormField(
+                    controller: _currentPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'Mot de passe actuel'),
+                    validator: (value) => (value == null || value.isEmpty) ? 'Requis' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _newPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'Nouveau mot de passe'),
+                    validator: (value) => (value == null || value.length < 8)
+                        ? 'Au moins 8 caractères'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _confirmPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Confirmer le nouveau mot de passe',
+                    ),
+                    validator: (value) => value != _newPasswordController.text
+                        ? 'Les mots de passe ne correspondent pas'
+                        : null,
+                  ),
+                  if (_passwordError != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _passwordError!,
+                      style: const TextStyle(
+                        color: CardioLensColors.alertAccent,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  _PrimaryActionButton(
+                    label: 'Changer le mot de passe',
+                    isLoading: _isChangingPassword,
+                    onPressed: _changePassword,
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -372,14 +367,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.icon,
-    required this.title,
-    required this.child,
-    this.subtitle,
-  });
+  const _SectionCard({required this.title, required this.child, this.subtitle});
 
-  final IconData icon;
   final String title;
   final String? subtitle;
   final Widget child;
@@ -392,38 +381,23 @@ class _SectionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: CardioLensColors.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(icon, size: 17, color: CardioLensColors.primary),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
-                  ),
-                ),
-              ],
+            Text(
+              title.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: CardioLensColors.textMuted,
+                letterSpacing: 0.2,
+              ),
             ),
             if (subtitle != null) ...[
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.only(left: 42),
-                child: Text(
-                  subtitle!,
-                  style: const TextStyle(fontSize: 12, color: CardioLensColors.textSecondary),
-                ),
+              const SizedBox(height: 3),
+              Text(
+                subtitle!,
+                style: const TextStyle(fontSize: 12, color: CardioLensColors.textSecondary),
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             child,
           ],
         ),
@@ -437,14 +411,14 @@ class _PrimaryActionButton extends StatelessWidget {
     required this.label,
     required this.isLoading,
     required this.onPressed,
-    this.icon,
     this.outlined = false,
+    this.compact = false,
   });
 
   final String label;
   final bool isLoading;
   final bool outlined;
-  final IconData? icon;
+  final bool compact;
   final VoidCallback onPressed;
 
   @override
@@ -458,47 +432,18 @@ class _PrimaryActionButton extends StatelessWidget {
               color: outlined ? CardioLensColors.primary : Colors.white,
             ),
           )
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[Icon(icon, size: 17), const SizedBox(width: 8)],
-              Text(label),
-            ],
-          );
+        : Text(label);
+
+    final style = compact
+        ? OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            minimumSize: const Size(0, 34),
+            textStyle: const TextStyle(fontSize: 12.5),
+          )
+        : null;
 
     return outlined
-        ? OutlinedButton(onPressed: isLoading ? null : onPressed, child: child)
-        : ElevatedButton(onPressed: isLoading ? null : onPressed, child: child);
-  }
-}
-
-class _CircleIconButton extends StatelessWidget {
-  const _CircleIconButton({
-    required this.icon,
-    required this.color,
-    required this.background,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final Color color;
-  final Color background;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: background,
-      shape: const CircleBorder(),
-      elevation: 1.5,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.all(7),
-          child: Icon(icon, size: 16, color: color),
-        ),
-      ),
-    );
+        ? OutlinedButton(onPressed: isLoading ? null : onPressed, style: style, child: child)
+        : ElevatedButton(onPressed: isLoading ? null : onPressed, style: style, child: child);
   }
 }

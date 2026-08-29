@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../theme.dart';
+import '../widgets/professional_title_field.dart';
 import 'forgot_password_screen.dart';
 import 'home_screen.dart';
 
@@ -24,6 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _lastNameController = TextEditingController();
   final _workplaceController = TextEditingController();
   final _passwordController = TextEditingController();
+  String? _professionalTitle;
 
   bool _isRegisterMode = false;
   bool _isSubmitting = false;
@@ -55,6 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
           lastName: _lastNameController.text.trim(),
           password: _passwordController.text,
           workplace: workplace.isEmpty ? null : workplace,
+          professionalTitle: _professionalTitle,
         );
       } else {
         await AuthService.instance.login(
@@ -142,6 +145,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         labelText: 'Cabinet médical / Hôpital (optionnel)',
                         hintText: 'ex : Cabinet Saint-Michel',
                       ),
+                    ),
+                    const SizedBox(height: 14),
+                    ProfessionalTitleField(
+                      initialValue: _professionalTitle,
+                      onChanged: (value) => _professionalTitle = value,
                     ),
                     const SizedBox(height: 14),
                   ],

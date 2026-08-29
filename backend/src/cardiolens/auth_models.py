@@ -53,6 +53,26 @@ class UserPasswordChange(BaseModel):
     new_password: str
 
 
+class PasswordResetToken(SQLModel, table=True):
+    """Short-lived, single-use token for the "forgot password" flow.
+    token_hash, not the raw token, is stored — same reasoning as hashing
+    account passwords: a DB read/leak must not hand out usable tokens."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    token_hash: str = Field(index=True, unique=True)
+    expires_at: datetime
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"

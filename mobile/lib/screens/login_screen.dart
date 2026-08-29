@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../theme.dart';
+import 'forgot_password_screen.dart';
 import 'home_screen.dart';
 
 /// First screen when no session is stored — toggles between "Se connecter"
@@ -162,6 +163,22 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? 'Au moins 8 caractères'
                         : null,
                   ),
+                  if (!_isRegisterMode) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _isSubmitting
+                            ? null
+                            : () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ForgotPasswordScreen(),
+                                ),
+                              ),
+                        child: const Text('Mot de passe oublié ?', style: TextStyle(fontSize: 12.5)),
+                      ),
+                    ),
+                  ],
                   if (_error != null) ...[
                     const SizedBox(height: 14),
                     Text(

@@ -286,6 +286,49 @@ class ApiClient {
     }).toList();
   }
 
+  /// Always succeeds (204) whether or not the email is registered — the
+  /// backend never leaks account existence. DEV-ONLY LIMITATION: no email
+  /// provider is wired up on the backend yet, so the reset token is only
+  /// visible in the backend's own logs — see ForgotPasswordScreen for how
+  /// that's surfaced honestly in the UI.
+  Future<void> forgotPassword(String email) async {
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/forgot-password'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'email': email}),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      throw ApiException("Impossible de joindre le serveur ($baseUrl).");
+    }
+    if (response.statusCode != 204) {
+      throw ApiException(_extractDetail(response) ?? 'Demande impossible.');
+    }
+  }
+
+  Future<void> resetPassword({required String token, required String newPassword}) async {
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/reset-password'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'token': token, 'new_password': newPassword}),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      throw ApiException("Impossible de joindre le serveur ($baseUrl).");
+    }
+    if (response.statusCode != 204) {
+      throw ApiException(
+        _extractDetail(response) ?? 'Lien de réinitialisation invalide ou expiré.',
+      );
+    }
+  }
+
   Future<void> changePassword({
     required String token,
     required String currentPassword,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -11,13 +12,17 @@ from sqlmodel import Session, select
 
 from cardiolens.afib_detection import predict_afib_probability
 from cardiolens.auth import (
+    consume_password_reset_token,
     create_access_token,
+    create_password_reset_token,
     get_current_user,
     get_current_user_optional,
     hash_password,
     verify_password,
 )
 from cardiolens.auth_models import (
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
     Token,
     User,
     UserLogin,
@@ -43,6 +48,8 @@ from cardiolens.signal_processing import ECGProcessingError, measure_ecg
 # scripts/train_afib_model.py's docstring for why this shouldn't be read as
 # a clinically validated cutoff.
 AFIB_ALERT_THRESHOLD = 0.5
+
+logger = logging.getLogger("cardiolens.auth")
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -128,6 +135,41 @@ def change_password(
         raise HTTPException(status_code=401, detail="Mot de passe actuel incorrect.")
     current_user.hashed_password = hash_password(payload.new_password)
     session.add(current_user)
+    session.commit()
+
+
+@app.post("/auth/forgot-password", status_code=204)
+def forgot_password(
+    payload: ForgotPasswordRequest, session: Session = Depends(get_session)
+) -> None:
+    """Always returns 204, whether or not the email is registered — never
+    let this endpoint leak which emails have an account.
+
+    DEV-ONLY LIMITATION: no email provider is wired up yet, so the reset
+    link is logged instead of sent (see ARCHITECTURE.md). A real
+    deployment MUST replace this with an actual email send before this
+    flow is usable outside development."""
+    user = session.exec(select(User).where(User.email == payload.email)).first()
+    if user is not None:
+        raw_token = create_password_reset_token(user.id, session)  # type: ignore[arg-type]
+        logger.warning(
+            "Password reset requested for %s — dev token (valid 30 min): %s",
+            user.email,
+            raw_token,
+        )
+
+
+@app.post("/auth/reset-password", status_code=204)
+def reset_password(
+    payload: ResetPasswordRequest, session: Session = Depends(get_session)
+) -> None:
+    user = consume_password_reset_token(payload.token, session)
+    if user is None:
+        raise HTTPException(
+            status_code=400, detail="Lien de réinitialisation invalide ou expiré."
+        )
+    user.hashed_password = hash_password(payload.new_password)
+    session.add(user)
     session.commit()
 
 

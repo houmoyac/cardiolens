@@ -11,6 +11,7 @@ def test_register_creates_a_user(client: TestClient) -> None:
     assert body["first_name"] == "Test"
     assert body["last_name"] == "Dupont"
     assert body["has_logo"] is False
+    assert body["has_avatar"] is False
     assert "password" not in body
     assert "hashed_password" not in body
 

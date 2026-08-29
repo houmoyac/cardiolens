@@ -51,6 +51,7 @@ class UserPublic(BaseModel):
     workplace: str | None
     professional_title: str | None
     has_logo: bool
+    has_avatar: bool
 
 
 class UserProfileUpdate(BaseModel):

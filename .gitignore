@@ -23,3 +23,4 @@ data/patients/
 # Uploaded workplace logos (doctor's own content, not meant to be shipped
 # in the repo — same reasoning as the account DB)
 user_logos/
+user_avatars/

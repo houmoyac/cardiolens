@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import SQLModel, create_engine
 
+import cardiolens.avatar_storage as avatar_storage_module
 import cardiolens.db as db_module
 import cardiolens.logo_storage as logo_storage_module
 
@@ -21,14 +22,17 @@ from cardiolens.api import app
 
 @pytest.fixture(autouse=True)
 def isolated_logo_storage(tmp_path: Path) -> Generator[None, None, None]:
-    """Never write test logos into the real (gitignored, but still local
-    and potentially populated) user_logos/ directory."""
-    original_dir = logo_storage_module.LOGOS_DIR
+    """Never write test logos/avatars into the real (gitignored, but still
+    local and potentially populated) user_logos//user_avatars/ dirs."""
+    original_logos_dir = logo_storage_module.LOGOS_DIR
+    original_avatars_dir = avatar_storage_module.AVATARS_DIR
     logo_storage_module.LOGOS_DIR = tmp_path / "user_logos"
+    avatar_storage_module.AVATARS_DIR = tmp_path / "user_avatars"
     try:
         yield
     finally:
-        logo_storage_module.LOGOS_DIR = original_dir
+        logo_storage_module.LOGOS_DIR = original_logos_dir
+        avatar_storage_module.AVATARS_DIR = original_avatars_dir
 
 
 @pytest.fixture(autouse=True)

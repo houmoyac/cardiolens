@@ -31,6 +31,13 @@ from cardiolens.auth_models import (
     UserPublic,
     UserRegister,
 )
+from cardiolens.avatar_storage import (
+    InvalidAvatarError,
+    delete_avatar,
+    has_avatar,
+    load_avatar_bytes,
+    save_avatar,
+)
 from cardiolens.case_models import AnalysisRecord, AnalysisRecordPublic, to_public
 from cardiolens.db import get_session, init_db
 from cardiolens.logo_storage import (
@@ -77,6 +84,7 @@ def _to_public(user: User) -> UserPublic:
         workplace=user.workplace,
         professional_title=user.professional_title,
         has_logo=has_logo(user.id),  # type: ignore[arg-type]
+        has_avatar=has_avatar(user.id),  # type: ignore[arg-type]
     )
 
 
@@ -199,6 +207,31 @@ def get_logo(current_user: User = Depends(get_current_user)) -> Response:
 @app.delete("/auth/me/logo", status_code=204)
 def remove_logo(current_user: User = Depends(get_current_user)) -> None:
     delete_logo(current_user.id)  # type: ignore[arg-type]
+
+
+@app.post("/auth/me/avatar", response_model=UserPublic)
+async def upload_avatar(
+    file: UploadFile, current_user: User = Depends(get_current_user)
+) -> UserPublic:
+    raw = await file.read()
+    try:
+        save_avatar(current_user.id, raw)  # type: ignore[arg-type]
+    except InvalidAvatarError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _to_public(current_user)
+
+
+@app.get("/auth/me/avatar")
+def get_avatar(current_user: User = Depends(get_current_user)) -> Response:
+    data = load_avatar_bytes(current_user.id)  # type: ignore[arg-type]
+    if data is None:
+        raise HTTPException(status_code=404, detail="Aucune photo de profil enregistrée.")
+    return Response(content=data, media_type="image/png")
+
+
+@app.delete("/auth/me/avatar", status_code=204)
+def remove_avatar(current_user: User = Depends(get_current_user)) -> None:
+    delete_avatar(current_user.id)  # type: ignore[arg-type]
 
 
 class AnalyzeRequest(BaseModel):

@@ -32,6 +32,7 @@ class AuthUser {
     this.workplace,
     this.professionalTitle,
     this.hasLogo = false,
+    this.hasAvatar = false,
   });
 
   final int id;
@@ -41,6 +42,7 @@ class AuthUser {
   final String? workplace;
   final String? professionalTitle;
   final bool hasLogo;
+  final bool hasAvatar;
 
   String get displayName => '$firstName $lastName';
 
@@ -52,6 +54,7 @@ class AuthUser {
     workplace: json['workplace'] as String?,
     professionalTitle: json['professional_title'] as String?,
     hasLogo: json['has_logo'] as bool? ?? false,
+    hasAvatar: json['has_avatar'] as bool? ?? false,
   );
 
   Map<String, dynamic> toJson() => {
@@ -60,6 +63,7 @@ class AuthUser {
     'first_name': firstName,
     'last_name': lastName,
     'has_logo': hasLogo,
+    'has_avatar': hasAvatar,
     'workplace': workplace,
     'professional_title': professionalTitle,
   };
@@ -298,6 +302,11 @@ class ApiClient {
         patientLabel: entry['patient_label'] as String,
         dateLabel: entry['date_label'] as String,
         id: entry['id'].toString(),
+        // The backend stores UTC but SQLite round-trips it without a
+        // timezone marker — without appending 'Z', DateTime.parse would
+        // misread it as local time and skew "this week" stats by the
+        // device's UTC offset.
+        createdAt: DateTime.tryParse('${entry['created_at']}Z'),
       );
     }).toList();
   }
@@ -420,6 +429,49 @@ class ApiClient {
       throw ApiException('Erreur serveur (${response.statusCode}).');
     }
   }
+
+  Future<AuthUser> uploadAvatar({required String token, required List<int> bytes}) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/auth/me/avatar'))
+      ..headers['Authorization'] = 'Bearer $token'
+      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: 'avatar.png'));
+
+    final http.Response response;
+    try {
+      final streamed = await request.send().timeout(const Duration(seconds: 15));
+      response = await http.Response.fromStream(streamed);
+    } catch (_) {
+      throw ApiException("Impossible de joindre le serveur ($baseUrl).");
+    }
+
+    if (response.statusCode == 401) {
+      throw AuthTokenInvalidException();
+    }
+    if (response.statusCode != 200) {
+      throw ApiException(_extractDetail(response) ?? 'Import de la photo impossible.');
+    }
+    return AuthUser.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<void> deleteAvatar(String token) async {
+    final http.Response response;
+    try {
+      response = await http
+          .delete(
+            Uri.parse('$baseUrl/auth/me/avatar'),
+            headers: {'Authorization': 'Bearer $token'},
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      throw ApiException("Impossible de joindre le serveur ($baseUrl).");
+    }
+
+    if (response.statusCode == 401) {
+      throw AuthTokenInvalidException();
+    }
+    if (response.statusCode != 204) {
+      throw ApiException('Erreur serveur (${response.statusCode}).');
+    }
+  }
 }
 
 String? _extractDetail(http.Response response) {
@@ -436,6 +488,7 @@ EcgCase _parseEcgCase(
   required String patientLabel,
   required String dateLabel,
   String? id,
+  DateTime? createdAt,
 }) {
   final m = body['measurements'] as Map<String, dynamic>;
   final alertsJson = body['alerts'] as List<dynamic>;
@@ -444,6 +497,7 @@ EcgCase _parseEcgCase(
     id: id ?? DateTime.now().millisecondsSinceEpoch.toString(),
     patientLabel: patientLabel,
     dateLabel: dateLabel,
+    createdAt: createdAt,
     measurements: EcgMeasurements(
       heartRateBpm: (m['heart_rate_bpm'] as num).toDouble(),
       prIntervalMs: (m['pr_interval_ms'] as num).toDouble(),

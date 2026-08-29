@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../models/ecg_result.dart';
+import '../services/api_client.dart';
+import '../services/api_config.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 import '../widgets/professional_title_field.dart';
@@ -30,9 +33,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool _isSavingInfo = false;
   bool _isUploadingLogo = false;
+  bool _isUploadingAvatar = false;
   bool _isChangingPassword = false;
   String? _error;
   String? _passwordError;
+
+  late final Future<List<EcgCase>> _casesFuture = _loadCases();
 
   @override
   void dispose() {
@@ -41,6 +47,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  Future<List<EcgCase>> _loadCases() {
+    final token = AuthService.instance.token;
+    return token == null
+        ? Future.value(const [])
+        : ApiClient(baseUrl: apiBaseUrl).fetchCases(token);
   }
 
   Future<void> _changePassword() async {
@@ -133,6 +146,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _pickAndUploadAvatar() async {
+    final XFile? picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    );
+    if (picked == null) return;
+
+    setState(() {
+      _isUploadingAvatar = true;
+      _error = null;
+    });
+    try {
+      final bytes = await picked.readAsBytes();
+      await AuthService.instance.uploadAvatar(bytes);
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _isUploadingAvatar = false);
+    }
+  }
+
+  Future<void> _removeAvatar() async {
+    setState(() {
+      _isUploadingAvatar = true;
+      _error = null;
+    });
+    try {
+      await AuthService.instance.deleteAvatar();
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _isUploadingAvatar = false);
+    }
+  }
+
+  Future<void> _showAvatarOptions(BuildContext context, {required bool hasAvatar}) async {
+    final action = await showModalBottomSheet<_AvatarAction>(
+      context: context,
+      backgroundColor: CardioLensColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_outlined),
+              title: Text(hasAvatar ? 'Changer la photo' : 'Ajouter une photo'),
+              onTap: () => Navigator.of(sheetContext).pop(_AvatarAction.pick),
+            ),
+            if (hasAvatar)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: CardioLensColors.alertAccent),
+                title: const Text(
+                  'Supprimer la photo',
+                  style: TextStyle(color: CardioLensColors.alertAccent),
+                ),
+                onTap: () => Navigator.of(sheetContext).pop(_AvatarAction.remove),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (action == _AvatarAction.pick) {
+      await _pickAndUploadAvatar();
+    } else if (action == _AvatarAction.remove) {
+      await _removeAvatar();
+    }
+  }
+
   String _initials(String? firstName, String? lastName) {
     final f = (firstName?.isNotEmpty ?? false) ? firstName![0] : '';
     final l = (lastName?.isNotEmpty ?? false) ? lastName![0] : '';
@@ -144,6 +234,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final doctor = AuthService.instance.currentUser;
     final logoUrl = AuthService.instance.logoUrl;
+    final avatarUrl = AuthService.instance.avatarUrl;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profil', style: TextStyle(fontSize: 15))),
@@ -155,21 +246,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.all(18),
               child: Row(
                 children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: CardioLensColors.primary.withValues(alpha: 0.08),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      _initials(doctor?.firstName, doctor?.lastName),
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: CardioLensColors.primary,
-                      ),
+                  GestureDetector(
+                    onTap: _isUploadingAvatar
+                        ? null
+                        : () => _showAvatarOptions(context, hasAvatar: avatarUrl != null),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: CardioLensColors.primary.withValues(alpha: 0.08),
+                          ),
+                          alignment: Alignment.center,
+                          child: avatarUrl == null
+                              ? Text(
+                                  _initials(doctor?.firstName, doctor?.lastName),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: CardioLensColors.primary,
+                                  ),
+                                )
+                              : ClipOval(
+                                  child: Image.network(
+                                    avatarUrl,
+                                    width: 56,
+                                    height: 56,
+                                    fit: BoxFit.cover,
+                                    headers: AuthService.instance.authHeaders,
+                                    errorBuilder: (_, _, _) => const Icon(
+                                      Icons.person_outline,
+                                      color: CardioLensColors.textMuted,
+                                    ),
+                                  ),
+                                ),
+                        ),
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: CardioLensColors.primary,
+                              border: Border.all(color: Colors.white, width: 1.5),
+                            ),
+                            child: _isUploadingAvatar
+                                ? const Padding(
+                                    padding: EdgeInsets.all(3),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 1.6,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.camera_alt_outlined,
+                                    size: 11,
+                                    color: Colors.white,
+                                  ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -206,6 +347,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
+          ),
+          const SizedBox(height: 14),
+          FutureBuilder<List<EcgCase>>(
+            future: _casesFuture,
+            builder: (context, snapshot) {
+              final cases = snapshot.data;
+              if (cases == null) return const SizedBox.shrink();
+              final now = DateTime.now();
+              final thisWeek = cases
+                  .where(
+                    (c) => c.createdAt != null && now.difference(c.createdAt!).inDays < 7,
+                  )
+                  .length;
+              final withoutAlert = cases.where((c) => !c.hasWarning).length;
+              final normalPct = cases.isEmpty
+                  ? null
+                  : (withoutAlert / cases.length * 100).round();
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _StatItem(value: '${cases.length}', label: 'ECG analysés'),
+                      ),
+                      const _StatDivider(),
+                      Expanded(
+                        child: _StatItem(value: '$thisWeek', label: 'Cette semaine'),
+                      ),
+                      const _StatDivider(),
+                      Expanded(
+                        child: _StatItem(
+                          value: normalPct == null ? '—' : '$normalPct%',
+                          label: 'Sans anomalie',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 14),
           _SectionCard(
@@ -445,5 +627,45 @@ class _PrimaryActionButton extends StatelessWidget {
     return outlined
         ? OutlinedButton(onPressed: isLoading ? null : onPressed, style: style, child: child)
         : ElevatedButton(onPressed: isLoading ? null : onPressed, style: style, child: child);
+  }
+}
+
+enum _AvatarAction { pick, remove }
+
+class _StatItem extends StatelessWidget {
+  const _StatItem({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: CardioLensColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 11, color: CardioLensColors.textSecondary),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatDivider extends StatelessWidget {
+  const _StatDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(width: 1, height: 32, color: CardioLensColors.border);
   }
 }

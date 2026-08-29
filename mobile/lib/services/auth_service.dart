@@ -32,6 +32,7 @@ class AuthService {
   // the OLD logo after "Changer le logo": the URL never changed, so
   // Flutter's image cache (and any HTTP cache) served the stale bytes.
   int _logoVersion = 0;
+  int _avatarVersion = 0;
 
   String? get token => _token;
   bool get isLoggedIn => currentUser != null;
@@ -157,8 +158,38 @@ class AuthService {
         lastName: current.lastName,
         workplace: current.workplace,
         professionalTitle: current.professionalTitle,
+        hasAvatar: current.hasAvatar,
       );
       _logoVersion++;
+      await _storage.write(key: _userKey, value: jsonEncode(currentUser!.toJson()));
+    }
+  }
+
+  Future<void> uploadAvatar(List<int> bytes) async {
+    final token = _token;
+    if (token == null) throw StateError('Not logged in.');
+    final user = await ApiClient(baseUrl: apiBaseUrl).uploadAvatar(token: token, bytes: bytes);
+    currentUser = user;
+    _avatarVersion++;
+    await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
+  }
+
+  Future<void> deleteAvatar() async {
+    final token = _token;
+    if (token == null) throw StateError('Not logged in.');
+    await ApiClient(baseUrl: apiBaseUrl).deleteAvatar(token);
+    final current = currentUser;
+    if (current != null) {
+      currentUser = AuthUser(
+        id: current.id,
+        email: current.email,
+        firstName: current.firstName,
+        lastName: current.lastName,
+        workplace: current.workplace,
+        professionalTitle: current.professionalTitle,
+        hasLogo: current.hasLogo,
+      );
+      _avatarVersion++;
       await _storage.write(key: _userKey, value: jsonEncode(currentUser!.toJson()));
     }
   }
@@ -170,6 +201,10 @@ class AuthService {
   /// logo doesn't keep showing the previous one from Flutter's image cache.
   String? get logoUrl =>
       (currentUser?.hasLogo ?? false) ? '$apiBaseUrl/auth/me/logo?v=$_logoVersion' : null;
+
+  /// Same idea as [logoUrl] but for the doctor's personal profile photo.
+  String? get avatarUrl =>
+      (currentUser?.hasAvatar ?? false) ? '$apiBaseUrl/auth/me/avatar?v=$_avatarVersion' : null;
 
   Map<String, String> get authHeaders => _token == null ? {} : {'Authorization': 'Bearer $_token'};
 

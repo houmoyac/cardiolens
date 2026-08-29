@@ -57,6 +57,7 @@ class EcgCase {
     this.leadLabel = 'Dérivation DII',
     this.samplingRateHz = 500,
     this.powerlineFilterHz = 50,
+    this.createdAt,
   });
 
   final String id;
@@ -64,6 +65,12 @@ class EcgCase {
   final String dateLabel;
   final EcgMeasurements measurements;
   final List<ClinicalAlert> alerts;
+
+  /// Set only for a case loaded from the doctor's real saved history (see
+  /// ApiClient.fetchCases) — null for demo/sample cases and for a
+  /// freshly-analyzed result that hasn't round-tripped through /cases.
+  /// Used for real stats (e.g. "this week"), never fabricated.
+  final DateTime? createdAt;
 
   /// Path to the bundled raw signal for this case (assets/sample_ecgs/...),
   /// sent to the real backend when it's reachable. Null for a case that

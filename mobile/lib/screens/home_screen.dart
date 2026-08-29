@@ -6,12 +6,8 @@ import 'package:flutter/material.dart';
 import '../data/sample_cases.dart';
 import '../models/ecg_result.dart';
 import '../services/api_client.dart';
-import '../services/api_config.dart';
-import '../services/auth_service.dart';
 import '../theme.dart';
 import 'analyzing_screen.dart';
-import 'login_screen.dart';
-import 'profile_screen.dart';
 import 'results_screen.dart';
 import 'scanning_screen.dart';
 
@@ -23,23 +19,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  Future<List<EcgCase>>? _casesFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCases();
-  }
-
-  void _loadCases() {
-    final token = AuthService.instance.token;
-    setState(() {
-      _casesFuture = token == null
-          ? Future.value(const [])
-          : ApiClient(baseUrl: apiBaseUrl).fetchCases(token);
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -57,41 +36,6 @@ class _HomeScreenState extends State<HomeScreen> {
           fontWeight: FontWeight.w700,
           color: CardioLensColors.textPrimary,
         ),
-        actions: [
-          PopupMenuButton<_AccountAction>(
-            icon: const Icon(
-              Icons.account_circle_outlined,
-              color: CardioLensColors.textSecondary,
-            ),
-            onSelected: (action) {
-              switch (action) {
-                case _AccountAction.profile:
-                  Navigator.of(
-                    context,
-                  ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
-                case _AccountAction.logout:
-                  _logout(context);
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem<_AccountAction>(
-                value: _AccountAction.profile,
-                child: Text(
-                  AuthService.instance.currentUser?.displayName ?? 'Profil',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: CardioLensColors.textPrimary,
-                  ),
-                ),
-              ),
-              const PopupMenuItem<_AccountAction>(
-                value: _AccountAction.logout,
-                child: Text('Se déconnecter'),
-              ),
-            ],
-          ),
-          const SizedBox(width: 4),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
@@ -120,67 +64,6 @@ class _HomeScreenState extends State<HomeScreen> {
             onTap: () => Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const ScanningScreen())),
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'Mes analyses',
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-          ),
-          const SizedBox(height: 12),
-          FutureBuilder<List<EcgCase>>(
-            future: _casesFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(
-                    child: SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2.4),
-                    ),
-                  ),
-                );
-              }
-              if (snapshot.hasError) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'Historique indisponible pour le moment.',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      color: CardioLensColors.textMuted,
-                    ),
-                  ),
-                );
-              }
-              final cases = snapshot.data ?? const [];
-              if (cases.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'Aucune analyse enregistrée pour l\'instant — importe un '
-                    'ECG pour commencer.',
-                    style: TextStyle(fontSize: 12.5, color: CardioLensColors.textMuted),
-                  ),
-                );
-              }
-              return Column(
-                children: [
-                  for (final ecgCase in cases) ...[
-                    _RecentCaseTile(
-                      ecgCase: ecgCase,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ResultsScreen(ecgCase: ecgCase),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                ],
-              );
-            },
           ),
           const SizedBox(height: 28),
           Row(
@@ -257,6 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final details = await _askImportDetails(context);
     if (details == null || !context.mounted) return;
 
+    if (!context.mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => AnalyzingScreen.realImport(
@@ -270,10 +154,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-    // Back on the home screen (from ResultsScreen, which replaced this
-    // route) — refresh so a newly saved analysis shows up without needing
-    // a manual pull-to-refresh or app restart.
-    if (mounted) _loadCases();
   }
 
   void _showImportError(BuildContext context, String message) {
@@ -354,17 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return '${two(now.day)}/${two(now.month)}/${now.year}';
   }
 
-  Future<void> _logout(BuildContext context) async {
-    await AuthService.instance.logout();
-    if (!context.mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
-    );
-  }
 }
-
-enum _AccountAction { profile, logout }
 
 class _ImportDetails {
   const _ImportDetails({

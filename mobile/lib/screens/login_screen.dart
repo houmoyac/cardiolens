@@ -4,7 +4,7 @@ import '../services/auth_service.dart';
 import '../theme.dart';
 import '../widgets/professional_title_field.dart';
 import 'forgot_password_screen.dart';
-import 'home_screen.dart';
+import 'main_tab_screen.dart';
 
 /// First screen when no session is stored — toggles between "Se connecter"
 /// and "Créer un compte". One doctor, one phone, one account: this is
@@ -68,7 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.of(
         context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const MainTabScreen()));
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());

@@ -128,6 +128,8 @@ def update_profile(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> UserPublic:
+    current_user.first_name = payload.first_name
+    current_user.last_name = payload.last_name
     current_user.workplace = payload.workplace
     current_user.professional_title = payload.professional_title
     session.add(current_user)

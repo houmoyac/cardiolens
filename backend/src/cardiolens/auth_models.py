@@ -55,6 +55,8 @@ class UserPublic(BaseModel):
 
 
 class UserProfileUpdate(BaseModel):
+    first_name: str
+    last_name: str
     workplace: str | None = None
     professional_title: str | None = None
 

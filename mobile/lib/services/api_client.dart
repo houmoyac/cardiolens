@@ -235,11 +235,13 @@ class ApiClient {
     return AuthUser.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  /// Updates both fields together (not two separate calls) — the backend
-  /// PATCH replaces whatever isn't sent with null, so a caller that saved
-  /// only `workplace` would silently blank out professional_title.
+  /// Updates all fields together, not piecemeal — the backend PATCH
+  /// replaces whatever isn't sent with null/empty, so a caller that saved
+  /// only one field would silently blank out the others.
   Future<AuthUser> updateProfile({
     required String token,
+    required String firstName,
+    required String lastName,
     String? workplace,
     String? professionalTitle,
   }) async {
@@ -253,6 +255,8 @@ class ApiClient {
               'Authorization': 'Bearer $token',
             },
             body: jsonEncode({
+              'first_name': firstName,
+              'last_name': lastName,
               'workplace': workplace,
               'professional_title': professionalTitle,
             }),

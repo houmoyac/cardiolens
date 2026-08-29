@@ -121,7 +121,7 @@ def test_update_profile_sets_the_workplace(client: TestClient) -> None:
 
     response = client.patch(
         "/auth/me",
-        json={"workplace": "Hôpital Nord"},
+        json={"first_name": "Test", "last_name": "Dupont", "workplace": "Hôpital Nord"},
         headers={"Authorization": f"Bearer {token}"},
     )
 
@@ -139,7 +139,7 @@ def test_update_profile_sets_the_professional_title(client: TestClient) -> None:
 
     response = client.patch(
         "/auth/me",
-        json={"professional_title": "Professeur"},
+        json={"first_name": "Test", "last_name": "Dupont", "professional_title": "Professeur"},
         headers={"Authorization": f"Bearer {token}"},
     )
 
@@ -147,8 +147,26 @@ def test_update_profile_sets_the_professional_title(client: TestClient) -> None:
     assert response.json()["professional_title"] == "Professeur"
 
 
+def test_update_profile_updates_the_name(client: TestClient) -> None:
+    _register(client)
+    token = _login_token(client)
+
+    response = client.patch(
+        "/auth/me",
+        json={"first_name": "Nouveau", "last_name": "Nom"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["first_name"] == "Nouveau"
+    assert response.json()["last_name"] == "Nom"
+
+
 def test_update_profile_requires_authentication(client: TestClient) -> None:
-    response = client.patch("/auth/me", json={"workplace": "Hôpital Nord"})
+    response = client.patch(
+        "/auth/me",
+        json={"first_name": "Test", "last_name": "Dupont", "workplace": "Hôpital Nord"},
+    )
     assert response.status_code == 401
 
 

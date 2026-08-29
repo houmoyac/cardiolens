@@ -111,11 +111,18 @@ class AuthService {
     await _storage.delete(key: _userKey);
   }
 
-  Future<void> updateProfile({String? workplace, String? professionalTitle}) async {
+  Future<void> updateProfile({
+    required String firstName,
+    required String lastName,
+    String? workplace,
+    String? professionalTitle,
+  }) async {
     final token = _token;
     if (token == null) throw StateError('Not logged in.');
     final user = await ApiClient(baseUrl: apiBaseUrl).updateProfile(
       token: token,
+      firstName: firstName,
+      lastName: lastName,
       workplace: workplace,
       professionalTitle: professionalTitle,
     );

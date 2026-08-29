@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/main_tab_screen.dart';
 import 'services/auth_service.dart';
 import 'theme.dart';
 
@@ -48,7 +48,7 @@ class _AuthGateState extends State<_AuthGate> {
             ),
           );
         }
-        return snapshot.data == true ? const HomeScreen() : const LoginScreen();
+        return snapshot.data == true ? const MainTabScreen() : const LoginScreen();
       },
     );
   }

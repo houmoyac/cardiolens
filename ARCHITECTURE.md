@@ -187,10 +187,35 @@ construit d'un bloc :
      pour être séparés de façon fiable. **Retiré** plutôt que de garder
      un correctif qui casse plus qu'il ne répare — reste un problème
      ouvert.
-9. **Pas encore fait** : le problème d'étiquette ci-dessus, et la
-   robustesse au bruit d'une vraie photo prise au téléphone (éclairage
-   variable, papier froissé, document qui ne se détache pas clairement de
-   son arrière-plan).
+10. **Deuxième tentative sur le problème d'étiquette — OCR, pas de la
+    géométrie** (`mask_text_regions`, `pytesseract` + le moteur
+    `tesseract` en dépendance système, pas juste une lib Python — donc un
+    vrai ajout aux prérequis de déploiement, pas gratuit). Contrairement
+    à la première tentative (taille/forme des composantes connexes,
+    abandonnée ci-dessus), celle-ci pose la vraie question : "est-ce que
+    ce sont des caractères imprimés", plutôt que de deviner à partir de
+    la forme. Peint en couleur de fond toute région où l'OCR détecte du
+    texte, avant l'extraction du tracé.
+
+    **Marche, avec une limite précise trouvée en la testant, pas
+    supposée** : sur une image synthétique où "aVR" est placé assez près
+    du tracé pour le contaminer (colonnes partagées) mais sans que les
+    lettres soient visuellement traversées par le trait de courbe,
+    `mask_text_regions` corrige entièrement la contamination (erreur
+    moyenne 32.7px → 0px sur la zone affectée). **Mais** : quand le trait
+    de la courbe traverse visuellement une lettre (ex. juste au sommet
+    d'un complexe QRS — le cas le plus gênant, pas un cas rare),
+    `tesseract` lui-même échoue à détecter le texte — testé avec la même
+    police, la même taille : "aVR" lu correctement (confiance ~87)
+    isolé ou à quelques pixels du trait, mais retourne une chaîne vide
+    dès que le trait croise une lettre. Le masquage ne fait alors
+    silencieusement rien. Voir le test de non-régression dans
+    `test_image_digitization.py` pour le placement exact qui marche et
+    celui qui ne marche pas.
+11. **Pas encore fait** : la robustesse au bruit d'une vraie photo prise
+    au téléphone (éclairage variable, papier froissé, document qui ne se
+    détache pas clairement de son arrière-plan) — toujours jamais testée
+    sur une vraie photo, synthétique et jeux de recherche seulement.
 
 **Hypothèses fortes à garder en tête** — la grille est supposée carrée
 (même espacement horizontal/vertical) et sa couleur doit être connue

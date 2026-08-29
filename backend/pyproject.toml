@@ -18,6 +18,13 @@ dependencies = [
     "pyjwt>=2.13.0",
     "bcrypt>=5.0.0",
     "email-validator>=2.3.0",
+    # Wraps the `tesseract` OCR engine, which is a SYSTEM dependency, not
+    # a Python package — `pip`/`uv` installing pytesseract does not
+    # install it. Local dev: `brew install tesseract`. Any real deployment
+    # target must have the tesseract binary on PATH for
+    # image_digitization.mask_text_regions to work (it's still an
+    # unused, optional preprocessing step for now — see ARCHITECTURE.md).
+    "pytesseract>=0.3.13",
 ]
 
 [dependency-groups]

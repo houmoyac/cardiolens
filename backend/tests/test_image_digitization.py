@@ -21,6 +21,7 @@ from cardiolens.image_digitization import (
     detect_grid_spacing_px,
     extract_trace_from_image,
     find_document_corners,
+    mask_text_regions,
     segment_grid_panels,
     trace_to_signal,
 )
@@ -89,6 +90,87 @@ def test_extract_trace_ignores_persistent_decoy_line() -> None:
         normalized_known,
     )
 
+    correlation = np.corrcoef(normalized_recovered, resampled_known)[0, 1]
+    assert correlation > 0.9
+
+
+def _overlay_text(
+    image: np.ndarray, text: str, position: tuple[int, int], font_size: int = 28
+) -> np.ndarray:
+    from PIL import ImageDraw, ImageFont
+
+    pil_image = Image.fromarray(image).convert("RGB")
+    draw = ImageDraw.Draw(pil_image)
+    # A real system TTF, not PIL's built-in bitmap default — found by
+    # testing that OCR reads the bitmap default's "aVR" as empty/garbled
+    # even in isolation, while a real font at the same size reads cleanly.
+    font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", font_size)
+    draw.text(position, text, fill=(0, 0, 0), font=font)
+    return np.asarray(pil_image)
+
+
+def test_mask_text_regions_lets_a_label_contaminated_trace_recover() -> None:
+    """Reproduces the real, still-open problem documented in
+    extract_trace_from_image: a lead label printed over the trace
+    corrupts extraction — but only some columns under the label (whichever
+    ones happen to have a bigger text-ink cluster than curve-ink cluster
+    that column), not the whole row. A whole-image correlation metric
+    (as the decoy-line regression test uses) is too diluted by the ~85%
+    of unaffected columns to show that — so this compares directly
+    against the clean image's own trace, restricted to the label's
+    column span, which is the actual claim being tested.
+
+    Proves mask_text_regions is a real improvement on this synthetic
+    case — not a claim that it's solved on a real, noisy photo (see the
+    module docstring)."""
+    x = np.linspace(0, 4 * np.pi, 400)
+    known_shape = np.sin(x)
+    clean_image = _render_curve_as_image(known_shape)
+    label_columns = slice(195, 260)
+    # Placement checked empirically (not guessed blind): close enough to
+    # the trace's column range to compete for "largest ink cluster" per
+    # column, without the glyph strokes visually crossing the curve line
+    # itself — the latter turned out to also confuse the OCR reading in
+    # testing, which would defeat the point of this test.
+    labeled_image = _overlay_text(clean_image, "aVR", position=(195, 140))
+
+    clean_trace = extract_trace_from_image(clean_image)
+    contaminated_trace = extract_trace_from_image(labeled_image)
+    masked_trace = extract_trace_from_image(mask_text_regions(labeled_image))
+
+    contaminated_error = np.abs(
+        contaminated_trace[label_columns] - clean_trace[label_columns]
+    ).mean()
+    masked_error = np.abs(masked_trace[label_columns] - clean_trace[label_columns]).mean()
+
+    # The label must actually have corrupted extraction in its own column
+    # span (otherwise this test isn't exercising the bug at all) ...
+    assert contaminated_error > 5.0
+    # ... and masking it out first must measurably recover it, close to
+    # how the same columns read with no label present.
+    assert masked_error < 1.0
+    assert masked_error < contaminated_error
+
+
+def test_mask_text_regions_leaves_a_label_free_image_unchanged_in_shape() -> None:
+    """Never a net-negative on a clean image — masking should have
+    nothing to do when there's no text, and must not accidentally paint
+    over real trace pixels."""
+    x = np.linspace(0, 4 * np.pi, 400)
+    known_shape = np.sin(x)
+    image = _render_curve_as_image(known_shape)
+
+    masked = mask_text_regions(image)
+    pixel_trace = extract_trace_from_image(masked)
+    recovered = trace_to_signal(pixel_trace)
+
+    normalized_recovered = (recovered - recovered.mean()) / recovered.std()
+    normalized_known = (known_shape - known_shape.mean()) / known_shape.std()
+    resampled_known = np.interp(
+        np.linspace(0, 1, len(normalized_recovered)),
+        np.linspace(0, 1, len(normalized_known)),
+        normalized_known,
+    )
     correlation = np.corrcoef(normalized_recovered, resampled_known)[0, 1]
     assert correlation > 0.9
 

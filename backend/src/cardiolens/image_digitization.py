@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
+import pytesseract
 from numpy.typing import NDArray
 from PIL import Image
 from scipy.signal import find_peaks
@@ -38,13 +39,17 @@ def extract_trace_from_image(
     that are dark in almost every column are excluded before picking each
     column's trace position — the trace moves, a border/grid line doesn't.
 
-    KNOWN UNSOLVED ISSUE (see ARCHITECTURE.md): a lead label printed
-    inside the panel ("aVR", "V2", ...) can still corrupt the trace near
-    where it sits — a connected-component filter meant to drop small
-    label-sized blobs was tried and reverted, because on real (if
-    low-quality/compressed) images the genuine trace itself fragments into
-    pieces of a similar size to label text; the filter did more harm than
-    good. Not fixed here — a real gap, not a silent one.
+    KNOWN PARTIALLY-ADDRESSED ISSUE (see ARCHITECTURE.md): a lead label
+    printed inside the panel ("aVR", "V2", ...) can corrupt the trace near
+    where it sits. A connected-component filter meant to drop small
+    label-sized blobs was tried first and reverted — real (if
+    low-quality/compressed) images fragment the genuine trace into pieces
+    similar in size to label text, so shape alone couldn't tell them
+    apart. `mask_text_regions` takes a different approach (OCR: is this
+    actually text) and is a real improvement on synthetic tests, but call
+    it explicitly before this function if wanted — it is NOT applied
+    automatically here, and has not yet been validated on a real, noisy
+    phone photo.
     """
     if image.ndim == 3:
         gray = np.asarray(Image.fromarray(image).convert("L"), dtype=np.float64)
@@ -89,6 +94,73 @@ def _find_dark_clusters(is_dark_col: NDArray[np.bool_]) -> list[tuple[float, int
 
 def _near_any_row(row: float, rows: NDArray[np.intp], tolerance_px: float = 2.0) -> bool:
     return bool(rows.size) and bool(np.any(np.abs(rows - row) <= tolerance_px))
+
+
+def mask_text_regions(
+    image: NDArray[np.uint8], min_confidence: int = 40, padding_px: int = 3
+) -> NDArray[np.uint8]:
+    """Paint over OCR-detected text (lead labels like "aVR", "V2") with the
+    background color, so `extract_trace_from_image` never sees it.
+
+    Why OCR, after a size/shape-based filter was tried and reverted (see
+    ARCHITECTURE.md and `extract_trace_from_image`'s docstring): the
+    earlier attempt tried to distinguish label text from trace by how the
+    dark pixels were *shaped* (component size, then width+height) — and
+    failed, because a real trace fragments (JPEG compression, thin
+    strokes) into pieces the same size as label characters. OCR instead
+    asks "is this actually text", which is the real distinguishing
+    question a shape heuristic could only approximate. Still not
+    guaranteed on a real, noisy phone photo — never claimed to be a full
+    fix, just the more targeted approach — so this stays a separate,
+    optional preprocessing step rather than being folded silently into
+    `extract_trace_from_image`, and every masked case should still be
+    checked against a real image before being trusted.
+
+    A SPECIFIC FAILURE MODE FOUND WHILE TESTING THIS, not a hypothetical:
+    when a label's glyphs visually cross the trace stroke itself (as
+    opposed to just sitting in the same column range), tesseract's own
+    character recognition gets confused by the curve line cutting through
+    the letters and can fail to detect the text at all — meaning masking
+    silently does nothing in exactly that case. Confirmed with the same
+    "aVR" string, same font/size: read correctly (confidence ~87) in
+    isolation or placed a few pixels away from the stroke, but returned
+    empty when the stroke crossed through a letter. This is arguably the
+    worst case to miss (a label overlapping a QRS complex), not a rare
+    corner case — see the regression test in test_image_digitization.py
+    for the exact placement that does and doesn't work.
+
+    Never mutates the input; returns a copy.
+    """
+    gray = np.asarray(Image.fromarray(image).convert("L")) if image.ndim == 3 else image
+    # Same background estimate as detect_grid_color: paper is the brightest
+    # population by far, so a high percentile is a safe "blend in" fill.
+    background_level = int(np.percentile(gray, 90))
+
+    result = image.copy()
+    fill = (background_level,) * 3 if image.ndim == 3 else background_level
+
+    ocr_data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT)
+    height, width = gray.shape[:2]
+    for i, text in enumerate(ocr_data["text"]):
+        if not text.strip():
+            continue
+        confidence = int(ocr_data["conf"][i])
+        if confidence < min_confidence:
+            continue
+
+        x, y, w, h = (
+            ocr_data["left"][i],
+            ocr_data["top"][i],
+            ocr_data["width"][i],
+            ocr_data["height"][i],
+        )
+        x0 = max(0, x - padding_px)
+        y0 = max(0, y - padding_px)
+        x1 = min(width, x + w + padding_px)
+        y1 = min(height, y + h + padding_px)
+        result[y0:y1, x0:x1] = fill
+
+    return result
 
 
 def trace_to_signal(pixel_trace: NDArray[np.float64]) -> NDArray[np.float64]:

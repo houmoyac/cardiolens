@@ -286,9 +286,27 @@ kiosque partagé). Routes : `POST /auth/register`, `POST /auth/login`,
 `GET /auth/me` (protégée, sert de preuve que l'authentification protège
 vraiment quelque chose).
 
-**Pas encore fait** : rien côté mobile (écrans de connexion/inscription),
-et le compte-rendu ne référence pas encore l'utilisateur connecté à la
-place du placeholder — la brique backend est prête, pas encore branchée.
 Le secret JWT par défaut (`dev-only-insecure-secret-change-me`) est
 volontairement voyant : un vrai déploiement doit le remplacer via
 `CARDIOLENS_JWT_SECRET`, non négociable.
+
+**Depuis étoffé côté mobile et backend** : écrans de connexion/inscription,
+menu compte + écran Profil, changement de mot de passe (`POST
+/auth/me/password`), et un profil de cabinet — nom de cabinet/hôpital
+(`PATCH /auth/me`) et logo uploadé par médecin (`POST`/`GET`/`DELETE
+/auth/me/logo`, stocké dans `user_logos/` — gitignored, même raisonnement
+que la base SQLite : contenu propre au médecin, pas à committer). Le
+compte-rendu affiche désormais le vrai nom du médecin connecté et son
+logo/cabinet à la place des anciens placeholders `[Dr. Nom Prénom]` et
+`[Cabinet médical]`.
+
+**Import réel et export PDF, aussi ajoutés** : "Importer un ECG" ouvre un
+vrai sélecteur de fichier (au lieu de proposer un cas de démo) et parse le
+CSV côté client de façon tolérante (en-tête, colonne temps — même logique
+que `io_utils.load_signal_from_csv` côté backend), avant d'envoyer le
+signal à `/analyze`. Aucun repli sur des données de démo en cas d'échec —
+il n'y a pas de données de démo honnêtes pour un fichier que le médecin a
+réellement apporté. "Télécharger PDF" / "Partager" génèrent un vrai PDF
+(paquets `pdf` + `printing`) et l'envoient à la feuille de partage du
+système — pas d'API de téléchargement direct sur mobile sans permissions
+de stockage supplémentaires.

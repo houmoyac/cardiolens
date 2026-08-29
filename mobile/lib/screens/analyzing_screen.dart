@@ -6,16 +6,48 @@ import '../services/api_config.dart';
 import '../theme.dart';
 import 'results_screen.dart';
 
-/// Shown after "Importer un ECG". If the picked case has a bundled signal
-/// (see EcgCase.signalAssetPath), this sends it to the real backend and
-/// shows its real response — the first part of the app not using static
-/// sample data. On failure (backend unreachable, phone off the Mac's
-/// WiFi, ...) it shows an explicit error, never a silent fallback to
-/// fake data — the physician must always know which they're looking at.
-class AnalyzingScreen extends StatefulWidget {
-  const AnalyzingScreen({super.key, required this.resultCase});
+/// A real file the doctor picked ("Importer un ECG"), already parsed
+/// client-side into a raw signal — see AnalyzingScreen.realImport. Unlike
+/// a demo EcgCase, there is no legitimate fallback data for this: if
+/// analysis fails, the only honest options are retry or cancel.
+class RealEcgImport {
+  const RealEcgImport({
+    required this.patientLabel,
+    required this.dateLabel,
+    required this.signal,
+    required this.samplingRateHz,
+    this.sex,
+  });
 
-  final EcgCase resultCase;
+  final String patientLabel;
+  final String dateLabel;
+  final List<double> signal;
+  final int samplingRateHz;
+  final String? sex;
+}
+
+/// Shown after "Importer un ECG". Two modes:
+/// - A bundled demo case (see EcgCase.signalAssetPath): sends the bundled
+///   signal to the real backend, with a "continue with demo data" fallback
+///   if that fails — the demo case's static measurements are a legitimate
+///   stand-in there, since they were never claimed to be a real result.
+/// - A real file the doctor picked (RealEcgImport): same real backend
+///   call, but NO fallback on failure — there is no fake data that would
+///   be honest to show for a file the doctor actually brought in.
+/// Either way, failure always shows an explicit error, never a silent
+/// swap to fake data — the physician must always know which they're
+/// looking at.
+class AnalyzingScreen extends StatefulWidget {
+  const AnalyzingScreen({super.key, required EcgCase demoCase})
+    : resultCase = demoCase,
+      realImport = null;
+
+  const AnalyzingScreen.realImport({super.key, required RealEcgImport import})
+    : resultCase = null,
+      realImport = import;
+
+  final EcgCase? resultCase;
+  final RealEcgImport? realImport;
 
   @override
   State<AnalyzingScreen> createState() => _AnalyzingScreenState();
@@ -33,10 +65,30 @@ class _AnalyzingScreenState extends State<AnalyzingScreen> {
   Future<void> _analyze() async {
     setState(() => _error = null);
 
-    final assetPath = widget.resultCase.signalAssetPath;
+    final realImport = widget.realImport;
+    if (realImport != null) {
+      try {
+        final client = ApiClient(baseUrl: apiBaseUrl);
+        final result = await client.analyze(
+          patientLabel: realImport.patientLabel,
+          dateLabel: realImport.dateLabel,
+          signal: realImport.signal,
+          samplingRateHz: realImport.samplingRateHz,
+          sex: realImport.sex,
+        );
+        _goToResults(result);
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _error = e.toString());
+      }
+      return;
+    }
+
+    final resultCase = widget.resultCase!;
+    final assetPath = resultCase.signalAssetPath;
     if (assetPath == null) {
       await Future.delayed(const Duration(milliseconds: 1400));
-      _goToResults(widget.resultCase);
+      _goToResults(resultCase);
       return;
     }
 
@@ -44,10 +96,10 @@ class _AnalyzingScreenState extends State<AnalyzingScreen> {
       final signal = await loadBundledSignal(assetPath);
       final client = ApiClient(baseUrl: apiBaseUrl);
       final result = await client.analyze(
-        patientLabel: widget.resultCase.patientLabel,
-        dateLabel: widget.resultCase.dateLabel,
+        patientLabel: resultCase.patientLabel,
+        dateLabel: resultCase.dateLabel,
         signal: signal,
-        samplingRateHz: widget.resultCase.samplingRateHz,
+        samplingRateHz: resultCase.samplingRateHz,
       );
       _goToResults(result);
     } catch (e) {
@@ -64,10 +116,10 @@ class _AnalyzingScreenState extends State<AnalyzingScreen> {
   }
 
   void _continueWithFallbackData() {
+    final resultCase = widget.resultCase;
+    if (resultCase == null) return;
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => ResultsScreen(ecgCase: widget.resultCase),
-      ),
+      MaterialPageRoute(builder: (_) => ResultsScreen(ecgCase: resultCase)),
     );
   }
 
@@ -82,7 +134,7 @@ class _AnalyzingScreenState extends State<AnalyzingScreen> {
               ? _ErrorState(
                   message: _error!,
                   onRetry: _analyze,
-                  onUseFallback: _continueWithFallbackData,
+                  onUseFallback: widget.resultCase != null ? _continueWithFallbackData : null,
                 )
               : Column(
                   mainAxisSize: MainAxisSize.min,
@@ -129,7 +181,7 @@ class _ErrorState extends StatelessWidget {
 
   final String message;
   final VoidCallback onRetry;
-  final VoidCallback onUseFallback;
+  final VoidCallback? onUseFallback;
 
   @override
   Widget build(BuildContext context) {
@@ -152,15 +204,17 @@ class _ErrorState extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         ElevatedButton(onPressed: onRetry, child: const Text('Réessayer')),
-        const SizedBox(height: 10),
-        TextButton(
-          onPressed: onUseFallback,
-          child: const Text(
-            'Continuer avec des données de démo (pas un vrai résultat)',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: CardioLensColors.textMuted),
+        if (onUseFallback != null) ...[
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: onUseFallback,
+            child: const Text(
+              'Continuer avec des données de démo (pas un vrai résultat)',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: CardioLensColors.textMuted),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }

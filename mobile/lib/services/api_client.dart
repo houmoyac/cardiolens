@@ -29,12 +29,16 @@ class AuthUser {
     required this.email,
     required this.firstName,
     required this.lastName,
+    this.workplace,
+    this.hasLogo = false,
   });
 
   final int id;
   final String email;
   final String firstName;
   final String lastName;
+  final String? workplace;
+  final bool hasLogo;
 
   String get displayName => '$firstName $lastName';
 
@@ -43,6 +47,8 @@ class AuthUser {
     email: json['email'] as String,
     firstName: json['first_name'] as String,
     lastName: json['last_name'] as String,
+    workplace: json['workplace'] as String?,
+    hasLogo: json['has_logo'] as bool? ?? false,
   );
 
   Map<String, dynamic> toJson() => {
@@ -50,6 +56,8 @@ class AuthUser {
     'email': email,
     'first_name': firstName,
     'last_name': lastName,
+    'has_logo': hasLogo,
+    'workplace': workplace,
   };
 }
 
@@ -125,6 +133,7 @@ class ApiClient {
     required String firstName,
     required String lastName,
     required String password,
+    String? workplace,
   }) async {
     final http.Response response;
     try {
@@ -137,7 +146,8 @@ class ApiClient {
               'first_name': firstName,
               'last_name': lastName,
               'password': password,
-            }),
+              'workplace': workplace,
+            }..removeWhere((_, value) => value == null)),
           )
           .timeout(const Duration(seconds: 10));
     } catch (_) {
@@ -206,6 +216,108 @@ class ApiClient {
     }
     return AuthUser.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
+
+  Future<AuthUser> updateWorkplace({required String token, String? workplace}) async {
+    final http.Response response;
+    try {
+      response = await http
+          .patch(
+            Uri.parse('$baseUrl/auth/me'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({'workplace': workplace}),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      throw ApiException("Impossible de joindre le serveur ($baseUrl).");
+    }
+
+    if (response.statusCode == 401) {
+      throw AuthTokenInvalidException();
+    }
+    if (response.statusCode != 200) {
+      throw ApiException(_extractDetail(response) ?? 'Mise à jour impossible.');
+    }
+    return AuthUser.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<void> changePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/me/password'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({
+              'current_password': currentPassword,
+              'new_password': newPassword,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      throw ApiException("Impossible de joindre le serveur ($baseUrl).");
+    }
+
+    if (response.statusCode == 401) {
+      final detail = _extractDetail(response);
+      throw ApiException(detail ?? 'Mot de passe actuel incorrect.');
+    }
+    if (response.statusCode != 204) {
+      throw ApiException(_extractDetail(response) ?? 'Changement de mot de passe impossible.');
+    }
+  }
+
+  Future<AuthUser> uploadLogo({required String token, required List<int> bytes}) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/auth/me/logo'))
+      ..headers['Authorization'] = 'Bearer $token'
+      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: 'logo.png'));
+
+    final http.Response response;
+    try {
+      final streamed = await request.send().timeout(const Duration(seconds: 15));
+      response = await http.Response.fromStream(streamed);
+    } catch (_) {
+      throw ApiException("Impossible de joindre le serveur ($baseUrl).");
+    }
+
+    if (response.statusCode == 401) {
+      throw AuthTokenInvalidException();
+    }
+    if (response.statusCode != 200) {
+      throw ApiException(_extractDetail(response) ?? 'Import du logo impossible.');
+    }
+    return AuthUser.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<void> deleteLogo(String token) async {
+    final http.Response response;
+    try {
+      response = await http
+          .delete(
+            Uri.parse('$baseUrl/auth/me/logo'),
+            headers: {'Authorization': 'Bearer $token'},
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      throw ApiException("Impossible de joindre le serveur ($baseUrl).");
+    }
+
+    if (response.statusCode == 401) {
+      throw AuthTokenInvalidException();
+    }
+    if (response.statusCode != 204) {
+      throw ApiException('Erreur serveur (${response.statusCode}).');
+    }
+  }
 }
 
 String? _extractDetail(http.Response response) {
@@ -262,4 +374,36 @@ Future<List<double>> loadBundledSignal(String assetPath) async {
       .where((line) => line.isNotEmpty)
       .map((line) => double.parse(line.split(',').last))
       .toList();
+}
+
+class InvalidSignalFileException implements Exception {
+  InvalidSignalFileException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Tolerant CSV parser for a user-picked ECG signal file. Unlike
+/// [loadBundledSignal] (which trusts our own bundled, header-less samples),
+/// a real file might have a header row or a leading time column — skips
+/// any line whose last field isn't a number instead of crashing, the same
+/// tolerance as the backend's io_utils.load_signal_from_csv (added after a
+/// real file from the field broke a naive parser).
+List<double> parseEcgSignalCsv(String csv) {
+  final values = <double>[];
+  for (final rawLine in csv.split('\n')) {
+    final line = rawLine.trim();
+    if (line.isEmpty) continue;
+    final value = double.tryParse(line.split(',').last.trim());
+    if (value != null) values.add(value);
+  }
+  if (values.isEmpty) {
+    throw InvalidSignalFileException(
+      'Aucune valeur numérique trouvée dans ce fichier. Format attendu : '
+      'une colonne de valeurs ECG, avec ou sans en-tête, avec ou sans '
+      'colonne de temps (CSV).',
+    );
+  }
+  return values;
 }

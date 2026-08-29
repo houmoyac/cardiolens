@@ -17,6 +17,7 @@ class User(SQLModel, table=True):
     email: str = Field(unique=True, index=True)
     first_name: str
     last_name: str
+    workplace: str | None = None
     hashed_password: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -26,6 +27,7 @@ class UserRegister(BaseModel):
     first_name: str
     last_name: str
     password: str
+    workplace: str | None = None
 
 
 class UserLogin(BaseModel):
@@ -38,6 +40,17 @@ class UserPublic(BaseModel):
     email: str
     first_name: str
     last_name: str
+    workplace: str | None
+    has_logo: bool
+
+
+class UserProfileUpdate(BaseModel):
+    workplace: str | None = None
+
+
+class UserPasswordChange(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class Token(BaseModel):

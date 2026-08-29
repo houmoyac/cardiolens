@@ -62,13 +62,7 @@ class ReportScreen extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      const Text(
-                        '[Cabinet médical]',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: CardioLensColors.textMuted,
-                        ),
-                      ),
+                      _WorkplaceBadge(),
                     ],
                   ),
                   const Divider(height: 28),
@@ -194,6 +188,40 @@ class ReportScreen extends StatelessWidget {
   void _showTodoSnack(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Export PDF pas encore implémenté.")),
+    );
+  }
+}
+
+/// Used to be a hardcoded "[Cabinet médical]" placeholder — now shows the
+/// doctor's own uploaded logo when there is one, falling back to the
+/// workplace name they typed in their profile, falling back to nothing
+/// (not a fake placeholder) when neither was ever set.
+class _WorkplaceBadge extends StatelessWidget {
+  const _WorkplaceBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final doctor = AuthService.instance.currentUser;
+    final logoUrl = AuthService.instance.logoUrl;
+
+    if (logoUrl != null) {
+      return SizedBox(
+        height: 22,
+        child: Image.network(
+          logoUrl,
+          headers: AuthService.instance.authHeaders,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        ),
+      );
+    }
+
+    final workplace = doctor?.workplace;
+    if (workplace == null || workplace.isEmpty) return const SizedBox.shrink();
+
+    return Text(
+      workplace,
+      style: const TextStyle(fontSize: 11, color: CardioLensColors.textMuted),
     );
   }
 }

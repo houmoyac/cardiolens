@@ -4,14 +4,30 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import numpy as np
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from cardiolens.afib_detection import predict_afib_probability
 from cardiolens.auth import create_access_token, get_current_user, hash_password, verify_password
-from cardiolens.auth_models import Token, User, UserLogin, UserPublic, UserRegister
+from cardiolens.auth_models import (
+    Token,
+    User,
+    UserLogin,
+    UserPasswordChange,
+    UserProfileUpdate,
+    UserPublic,
+    UserRegister,
+)
 from cardiolens.db import get_session, init_db
+from cardiolens.logo_storage import (
+    InvalidLogoError,
+    delete_logo,
+    has_logo,
+    load_logo_bytes,
+    save_logo,
+)
 from cardiolens.models import AlertSeverity, AlertSource, ClinicalAlert, ECGMeasurements
 from cardiolens.rules import ESC_DEFAULT, evaluate_rules
 from cardiolens.signal_processing import ECGProcessingError, measure_ecg
@@ -38,8 +54,19 @@ app = FastAPI(
 )
 
 
+def _to_public(user: User) -> UserPublic:
+    return UserPublic(
+        id=user.id,  # type: ignore[arg-type]
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        workplace=user.workplace,
+        has_logo=has_logo(user.id),  # type: ignore[arg-type]
+    )
+
+
 @app.post("/auth/register", response_model=UserPublic, status_code=201)
-def register(payload: UserRegister, session: Session = Depends(get_session)) -> User:
+def register(payload: UserRegister, session: Session = Depends(get_session)) -> UserPublic:
     existing = session.exec(select(User).where(User.email == payload.email)).first()
     if existing is not None:
         raise HTTPException(status_code=409, detail="Un compte existe déjà avec cet email.")
@@ -48,12 +75,13 @@ def register(payload: UserRegister, session: Session = Depends(get_session)) -> 
         email=payload.email,
         first_name=payload.first_name,
         last_name=payload.last_name,
+        workplace=payload.workplace,
         hashed_password=hash_password(payload.password),
     )
     session.add(user)
     session.commit()
     session.refresh(user)
-    return user
+    return _to_public(user)
 
 
 @app.post("/auth/login", response_model=Token)
@@ -66,8 +94,59 @@ def login(payload: UserLogin, session: Session = Depends(get_session)) -> Token:
 
 
 @app.get("/auth/me", response_model=UserPublic)
-def me(current_user: User = Depends(get_current_user)) -> User:
-    return current_user
+def me(current_user: User = Depends(get_current_user)) -> UserPublic:
+    return _to_public(current_user)
+
+
+@app.patch("/auth/me", response_model=UserPublic)
+def update_profile(
+    payload: UserProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> UserPublic:
+    current_user.workplace = payload.workplace
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
+    return _to_public(current_user)
+
+
+@app.post("/auth/me/password", status_code=204)
+def change_password(
+    payload: UserPasswordChange,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> None:
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Mot de passe actuel incorrect.")
+    current_user.hashed_password = hash_password(payload.new_password)
+    session.add(current_user)
+    session.commit()
+
+
+@app.post("/auth/me/logo", response_model=UserPublic)
+async def upload_logo(
+    file: UploadFile, current_user: User = Depends(get_current_user)
+) -> UserPublic:
+    raw = await file.read()
+    try:
+        save_logo(current_user.id, raw)  # type: ignore[arg-type]
+    except InvalidLogoError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _to_public(current_user)
+
+
+@app.get("/auth/me/logo")
+def get_logo(current_user: User = Depends(get_current_user)) -> Response:
+    data = load_logo_bytes(current_user.id)  # type: ignore[arg-type]
+    if data is None:
+        raise HTTPException(status_code=404, detail="Aucun logo enregistré.")
+    return Response(content=data, media_type="image/png")
+
+
+@app.delete("/auth/me/logo", status_code=204)
+def remove_logo(current_user: User = Depends(get_current_user)) -> None:
+    delete_logo(current_user.id)  # type: ignore[arg-type]
 
 
 class AnalyzeRequest(BaseModel):

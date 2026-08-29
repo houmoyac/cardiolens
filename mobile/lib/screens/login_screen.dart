@@ -21,6 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
+  final _workplaceController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _isRegisterMode = false;
@@ -32,6 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.dispose();
     _firstNameController.dispose();
     _lastNameController.dispose();
+    _workplaceController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -45,11 +47,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       if (_isRegisterMode) {
+        final workplace = _workplaceController.text.trim();
         await AuthService.instance.register(
           email: _emailController.text.trim(),
           firstName: _firstNameController.text.trim(),
           lastName: _lastNameController.text.trim(),
           password: _passwordController.text,
+          workplace: workplace.isEmpty ? null : workplace,
         );
       } else {
         await AuthService.instance.login(
@@ -128,6 +132,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       validator: (value) => (value == null || value.trim().isEmpty)
                           ? 'Requis'
                           : null,
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _workplaceController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Cabinet médical / Hôpital (optionnel)',
+                        hintText: 'ex : Cabinet Saint-Michel',
+                      ),
                     ),
                     const SizedBox(height: 14),
                   ],

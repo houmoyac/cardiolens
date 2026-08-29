@@ -72,6 +72,7 @@ class AuthService {
     required String firstName,
     required String lastName,
     required String password,
+    String? workplace,
   }) async {
     final client = ApiClient(baseUrl: apiBaseUrl);
     await client.register(
@@ -79,6 +80,7 @@ class AuthService {
       firstName: firstName,
       lastName: lastName,
       password: password,
+      workplace: workplace,
     );
     await login(email: email, password: password);
   }
@@ -97,4 +99,60 @@ class AuthService {
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _userKey);
   }
+
+  Future<void> updateWorkplace(String? workplace) async {
+    final token = _token;
+    if (token == null) throw StateError('Not logged in.');
+    final user = await ApiClient(
+      baseUrl: apiBaseUrl,
+    ).updateWorkplace(token: token, workplace: workplace);
+    currentUser = user;
+    await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final token = _token;
+    if (token == null) throw StateError('Not logged in.');
+    await ApiClient(baseUrl: apiBaseUrl).changePassword(
+      token: token,
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
+  }
+
+  Future<void> uploadLogo(List<int> bytes) async {
+    final token = _token;
+    if (token == null) throw StateError('Not logged in.');
+    final user = await ApiClient(baseUrl: apiBaseUrl).uploadLogo(token: token, bytes: bytes);
+    currentUser = user;
+    await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
+  }
+
+  Future<void> deleteLogo() async {
+    final token = _token;
+    if (token == null) throw StateError('Not logged in.');
+    await ApiClient(baseUrl: apiBaseUrl).deleteLogo(token);
+    final current = currentUser;
+    if (current != null) {
+      currentUser = AuthUser(
+        id: current.id,
+        email: current.email,
+        firstName: current.firstName,
+        lastName: current.lastName,
+        workplace: current.workplace,
+      );
+      await _storage.write(key: _userKey, value: jsonEncode(currentUser!.toJson()));
+    }
+  }
+
+  /// URL for the doctor's uploaded workplace logo — the report/home screen
+  /// pass this to Image.network with an Authorization header (the route is
+  /// authenticated, same as any other /auth/me/* endpoint). Null when no
+  /// logo has been uploaded.
+  String? get logoUrl => (currentUser?.hasLogo ?? false) ? '$apiBaseUrl/auth/me/logo' : null;
+
+  Map<String, String> get authHeaders => _token == null ? {} : {'Authorization': 'Bearer $_token'};
 }

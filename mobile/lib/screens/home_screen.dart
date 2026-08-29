@@ -1,11 +1,16 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../data/sample_cases.dart';
 import '../models/ecg_result.dart';
+import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 import 'analyzing_screen.dart';
 import 'login_screen.dart';
+import 'profile_screen.dart';
 import 'results_screen.dart';
 import 'scanning_screen.dart';
 
@@ -36,13 +41,20 @@ class HomeScreen extends StatelessWidget {
               color: CardioLensColors.textSecondary,
             ),
             onSelected: (action) {
-              if (action == _AccountAction.logout) _logout(context);
+              switch (action) {
+                case _AccountAction.profile:
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+                case _AccountAction.logout:
+                  _logout(context);
+              }
             },
             itemBuilder: (context) => [
               PopupMenuItem<_AccountAction>(
-                enabled: false,
+                value: _AccountAction.profile,
                 child: Text(
-                  AuthService.instance.currentUser?.displayName ?? '',
+                  AuthService.instance.currentUser?.displayName ?? 'Profil',
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     color: CardioLensColors.textPrimary,
@@ -72,9 +84,9 @@ class HomeScreen extends StatelessWidget {
           _ImportButton(
             icon: Icons.file_upload_outlined,
             title: 'Importer un ECG',
-            subtitle: 'Fichier numérique (CSV pour le moment)',
+            subtitle: 'Fichier numérique (CSV)',
             filled: true,
-            onTap: () => _pickDemoCaseAndAnalyze(context),
+            onTap: () => _pickRealFileAndAnalyze(context),
           ),
           const SizedBox(height: 10),
           _ImportButton(
@@ -120,58 +132,138 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  /// Real file import isn't wired to anything yet (see EcgCase docs) — a
-  /// picker here, instead of silently always analyzing the same case, is
-  /// honest about that: it's a stand-in for choosing a file, not a fake
-  /// working importer.
-  Future<void> _pickDemoCaseAndAnalyze(BuildContext context) async {
-    final chosen = await showModalBottomSheet<EcgCase>(
-      context: context,
-      backgroundColor: CardioLensColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+  /// Picks a real CSV file from device storage, parses it client-side
+  /// (tolerant of a header row / leading time column — see
+  /// parseEcgSignalCsv), asks for the sampling rate + sex the backend
+  /// needs, then sends it to the real analysis endpoint. No demo-data
+  /// fallback here on purpose: there's no legitimate stand-in for a file
+  /// the doctor actually brought in — see AnalyzingScreen.realImport.
+  Future<void> _pickRealFileAndAnalyze(BuildContext context) async {
+    FilePickerResult? picked;
+    try {
+      picked = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv', 'txt'],
+        withData: true,
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      _showImportError(context, "Impossible d'ouvrir le sélecteur de fichiers.");
+      return;
+    }
+    if (picked == null || picked.files.isEmpty) return;
+
+    final bytes = picked.files.single.bytes;
+    if (bytes == null) {
+      if (!context.mounted) return;
+      _showImportError(context, 'Impossible de lire ce fichier.');
+      return;
+    }
+
+    final List<double> signal;
+    try {
+      signal = parseEcgSignalCsv(utf8.decode(bytes, allowMalformed: true));
+    } on InvalidSignalFileException catch (e) {
+      if (!context.mounted) return;
+      _showImportError(context, e.message);
+      return;
+    }
+
+    if (!context.mounted) return;
+    final details = await _askImportDetails(context);
+    if (details == null || !context.mounted) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AnalyzingScreen.realImport(
+          import: RealEcgImport(
+            patientLabel: details.patientLabel,
+            dateLabel: 'Importé le ${_todayLabel()}',
+            signal: signal,
+            samplingRateHz: details.samplingRateHz,
+            sex: details.sex,
+          ),
+        ),
       ),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
-              child: Text(
-                'Import de fichier pas encore branché — choisis un cas '
-                'de démonstration à analyser',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: CardioLensColors.textSecondary,
+    );
+  }
+
+  void _showImportError(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<_ImportDetails?> _askImportDetails(BuildContext context) {
+    final patientController = TextEditingController();
+    final samplingRateController = TextEditingController(text: '500');
+    String? sex;
+
+    return showDialog<_ImportDetails>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
+          title: const Text('Détails du tracé'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: patientController,
+                decoration: const InputDecoration(
+                  labelText: 'Patient (optionnel)',
+                  hintText: 'ex : Patient #A-3012',
                 ),
               ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: samplingRateController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "Fréquence d'échantillonnage (Hz)",
+                ),
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String?>(
+                initialValue: sex,
+                decoration: const InputDecoration(labelText: 'Sexe (optionnel)'),
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('Non précisé')),
+                  DropdownMenuItem(value: 'F', child: Text('Femme')),
+                  DropdownMenuItem(value: 'M', child: Text('Homme')),
+                ],
+                onChanged: (value) => setState(() => sex = value),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Annuler'),
             ),
-            for (final ecgCase in sampleCases)
-              ListTile(
-                leading: const Icon(
-                  Icons.monitor_heart_outlined,
-                  color: CardioLensColors.primary,
-                ),
-                title: Text(ecgCase.patientLabel),
-                subtitle: Text(ecgCase.dateLabel),
-                onTap: () => Navigator.of(sheetContext).pop(ecgCase),
-              ),
-            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: () {
+                final rate = int.tryParse(samplingRateController.text.trim());
+                if (rate == null || rate <= 0) return;
+                final patientLabel = patientController.text.trim();
+                Navigator.of(dialogContext).pop(
+                  _ImportDetails(
+                    patientLabel: patientLabel.isEmpty ? 'ECG importé' : patientLabel,
+                    samplingRateHz: rate,
+                    sex: sex,
+                  ),
+                );
+              },
+              child: const Text('Analyser'),
+            ),
           ],
         ),
       ),
     );
-
-    if (chosen != null && context.mounted) {
-      _startAnalysis(context, chosen);
-    }
   }
 
-  void _startAnalysis(BuildContext context, EcgCase demoCase) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => AnalyzingScreen(resultCase: demoCase)),
-    );
+  String _todayLabel() {
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(now.day)}/${two(now.month)}/${now.year}';
   }
 
   Future<void> _logout(BuildContext context) async {
@@ -184,7 +276,19 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-enum _AccountAction { logout }
+enum _AccountAction { profile, logout }
+
+class _ImportDetails {
+  const _ImportDetails({
+    required this.patientLabel,
+    required this.samplingRateHz,
+    this.sex,
+  });
+
+  final String patientLabel;
+  final int samplingRateHz;
+  final String? sex;
+}
 
 class _ImportButton extends StatelessWidget {
   const _ImportButton({

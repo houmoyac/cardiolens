@@ -97,14 +97,22 @@ def test_extract_trace_ignores_persistent_decoy_line() -> None:
 def _overlay_text(
     image: np.ndarray, text: str, position: tuple[int, int], font_size: int = 28
 ) -> np.ndarray:
+    import os
+
     from PIL import ImageDraw, ImageFont
 
     pil_image = Image.fromarray(image).convert("RGB")
     draw = ImageDraw.Draw(pil_image)
-    # A real system TTF, not PIL's built-in bitmap default — found by
+    # A real outline TTF, not PIL's built-in bitmap default — found by
     # testing that OCR reads the bitmap default's "aVR" as empty/garbled
     # even in isolation, while a real font at the same size reads cleanly.
-    font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", font_size)
+    # DejaVuSans, not a system font path: matplotlib (already a
+    # dependency) bundles it, so this works identically on every
+    # platform/CI runner instead of only wherever that path happens to
+    # exist — a real system-font path here is exactly what broke CI the
+    # first time this test was written.
+    font_path = os.path.join(matplotlib.get_data_path(), "fonts", "ttf", "DejaVuSans.ttf")
+    font = ImageFont.truetype(font_path, font_size)
     draw.text(position, text, fill=(0, 0, 0), font=font)
     return np.asarray(pil_image)
 

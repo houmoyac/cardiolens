@@ -55,3 +55,24 @@ def get_current_user(
     if user is None:
         raise credentials_error
     return user
+
+
+_optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+
+
+def get_current_user_optional(
+    token: str | None = Depends(_optional_oauth2_scheme),
+    session: Session = Depends(get_session),
+) -> User | None:
+    """Same as get_current_user, but returns None instead of raising when
+    no (or an invalid) token is given — for endpoints like /analyze that
+    work whether or not the caller is logged in, but behave differently
+    when they are (saving to that doctor's history)."""
+    if token is None:
+        return None
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload["sub"])
+    except (jwt.PyJWTError, KeyError, ValueError):
+        return None
+    return session.get(User, user_id)

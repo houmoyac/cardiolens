@@ -10,7 +10,13 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from cardiolens.afib_detection import predict_afib_probability
-from cardiolens.auth import create_access_token, get_current_user, hash_password, verify_password
+from cardiolens.auth import (
+    create_access_token,
+    get_current_user,
+    get_current_user_optional,
+    hash_password,
+    verify_password,
+)
 from cardiolens.auth_models import (
     Token,
     User,
@@ -20,6 +26,7 @@ from cardiolens.auth_models import (
     UserPublic,
     UserRegister,
 )
+from cardiolens.case_models import AnalysisRecord, AnalysisRecordPublic, to_public
 from cardiolens.db import get_session, init_db
 from cardiolens.logo_storage import (
     InvalidLogoError,
@@ -153,15 +160,28 @@ class AnalyzeRequest(BaseModel):
     signal: list[float]
     sampling_rate: int
     sex: str | None = None
+    # Optional: only used to label a saved history entry when the caller is
+    # authenticated (see analyze()). A caller with no use for history (the
+    # Streamlit tool, an unauthenticated request) can omit these.
+    patient_label: str | None = None
+    date_label: str | None = None
 
 
 class AnalyzeResponse(BaseModel):
     measurements: ECGMeasurements
     alerts: list[ClinicalAlert]
+    saved_case_id: int | None = None
+    """Set when the caller was authenticated — the record's id in their
+    analysis history (see /cases). None for an unauthenticated call: never
+    silently save something the caller can't attribute to a doctor."""
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
-def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
+def analyze(
+    request: AnalyzeRequest,
+    current_user: User | None = Depends(get_current_user_optional),
+    session: Session = Depends(get_session),
+) -> AnalyzeResponse:
     signal = np.asarray(request.signal, dtype=np.float64)
     try:
         measurements = measure_ecg(signal, sampling_rate=request.sampling_rate)
@@ -191,7 +211,59 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
             )
         )
 
-    return AnalyzeResponse(measurements=measurements, alerts=alerts)
+    saved_case_id = None
+    if current_user is not None:
+        record = AnalysisRecord(
+            user_id=current_user.id,
+            patient_label=request.patient_label or "ECG",
+            date_label=request.date_label or "",
+            measurements_json=measurements.model_dump_json(),
+            alerts_json=f"[{','.join(a.model_dump_json() for a in alerts)}]",
+        )
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+        saved_case_id = record.id
+
+    return AnalyzeResponse(measurements=measurements, alerts=alerts, saved_case_id=saved_case_id)
+
+
+@app.get("/cases", response_model=list[AnalysisRecordPublic])
+def list_cases(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> list[AnalysisRecordPublic]:
+    records = session.exec(
+        select(AnalysisRecord)
+        .where(AnalysisRecord.user_id == current_user.id)
+        .order_by(AnalysisRecord.created_at.desc())  # type: ignore[attr-defined]
+    ).all()
+    return [to_public(r) for r in records]
+
+
+@app.get("/cases/{case_id}", response_model=AnalysisRecordPublic)
+def get_case(
+    case_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> AnalysisRecordPublic:
+    record = session.get(AnalysisRecord, case_id)
+    if record is None or record.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Analyse introuvable.")
+    return to_public(record)
+
+
+@app.delete("/cases/{case_id}", status_code=204)
+def delete_case(
+    case_id: int,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> None:
+    record = session.get(AnalysisRecord, case_id)
+    if record is None or record.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Analyse introuvable.")
+    session.delete(record)
+    session.commit()
 
 
 @app.get("/health")

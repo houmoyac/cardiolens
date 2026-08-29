@@ -22,6 +22,20 @@ jobs:
       - run: uv run pytest --cov=cardiolens
       - run: uv run pip-audit
 
+  mobile:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
   pre-commit:
     runs-on: ubuntu-latest
     steps:

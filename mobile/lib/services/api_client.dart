@@ -91,17 +91,25 @@ class ApiClient {
     required List<double> signal,
     required int samplingRateHz,
     String? sex,
+    String? token,
   }) async {
     final http.Response response;
     try {
       response = await http
           .post(
             Uri.parse('$baseUrl/analyze'),
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+              'Content-Type': 'application/json',
+              if (token != null) 'Authorization': 'Bearer $token',
+            },
             body: jsonEncode({
               'signal': signal,
               'sampling_rate': samplingRateHz,
               'sex': sex,
+              // Only meaningful when authenticated (saved to that doctor's
+              // history) — harmless, ignored otherwise.
+              'patient_label': patientLabel,
+              'date_label': dateLabel,
             }..removeWhere((_, value) => value == null)),
           )
           .timeout(const Duration(seconds: 15));
@@ -243,6 +251,41 @@ class ApiClient {
     return AuthUser.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
+  /// The doctor's saved analysis history (see /cases on the backend) —
+  /// every /analyze call made while logged in gets archived there
+  /// automatically. Newest first.
+  Future<List<EcgCase>> fetchCases(String token) async {
+    final http.Response response;
+    try {
+      response = await http
+          .get(
+            Uri.parse('$baseUrl/cases'),
+            headers: {'Authorization': 'Bearer $token'},
+          )
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      throw ApiException("Impossible de joindre le serveur ($baseUrl).");
+    }
+
+    if (response.statusCode == 401) {
+      throw AuthTokenInvalidException();
+    }
+    if (response.statusCode != 200) {
+      throw ApiException('Erreur serveur (${response.statusCode}).');
+    }
+
+    final items = jsonDecode(response.body) as List<dynamic>;
+    return items.map((raw) {
+      final entry = raw as Map<String, dynamic>;
+      return _parseEcgCase(
+        entry,
+        patientLabel: entry['patient_label'] as String,
+        dateLabel: entry['date_label'] as String,
+        id: entry['id'].toString(),
+      );
+    }).toList();
+  }
+
   Future<void> changePassword({
     required String token,
     required String currentPassword,
@@ -333,12 +376,13 @@ EcgCase _parseEcgCase(
   Map<String, dynamic> body, {
   required String patientLabel,
   required String dateLabel,
+  String? id,
 }) {
   final m = body['measurements'] as Map<String, dynamic>;
   final alertsJson = body['alerts'] as List<dynamic>;
 
   return EcgCase(
-    id: DateTime.now().millisecondsSinceEpoch.toString(),
+    id: id ?? DateTime.now().millisecondsSinceEpoch.toString(),
     patientLabel: patientLabel,
     dateLabel: dateLabel,
     measurements: EcgMeasurements(

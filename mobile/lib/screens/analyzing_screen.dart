@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/ecg_result.dart';
 import '../services/api_client.dart';
 import '../services/api_config.dart';
+import '../services/auth_service.dart';
 import '../theme.dart';
 import 'results_screen.dart';
 
@@ -75,6 +76,11 @@ class _AnalyzingScreenState extends State<AnalyzingScreen> {
           signal: realImport.signal,
           samplingRateHz: realImport.samplingRateHz,
           sex: realImport.sex,
+          // Real imports are saved to the doctor's history automatically
+          // (see the backend's /analyze) — demo/bundled cases below are
+          // deliberately NOT tagged with a token, so PTB-XL samples never
+          // clutter a doctor's real analysis history.
+          token: AuthService.instance.token,
         );
         _goToResults(result);
       } catch (e) {

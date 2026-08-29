@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../data/sample_cases.dart';
 import '../models/ecg_result.dart';
 import '../services/api_client.dart';
+import '../services/api_config.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 import 'analyzing_screen.dart';
@@ -14,8 +15,30 @@ import 'profile_screen.dart';
 import 'results_screen.dart';
 import 'scanning_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  Future<List<EcgCase>>? _casesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCases();
+  }
+
+  void _loadCases() {
+    final token = AuthService.instance.token;
+    setState(() {
+      _casesFuture = token == null
+          ? Future.value(const [])
+          : ApiClient(baseUrl: apiBaseUrl).fetchCases(token);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -99,11 +122,72 @@ class HomeScreen extends StatelessWidget {
             ).push(MaterialPageRoute(builder: (_) => const ScanningScreen())),
           ),
           const SizedBox(height: 28),
+          const Text(
+            'Mes analyses',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+          FutureBuilder<List<EcgCase>>(
+            future: _casesFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    ),
+                  ),
+                );
+              }
+              if (snapshot.hasError) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Historique indisponible pour le moment.',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: CardioLensColors.textMuted,
+                    ),
+                  ),
+                );
+              }
+              final cases = snapshot.data ?? const [];
+              if (cases.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Aucune analyse enregistrée pour l\'instant — importe un '
+                    'ECG pour commencer.',
+                    style: TextStyle(fontSize: 12.5, color: CardioLensColors.textMuted),
+                  ),
+                );
+              }
+              return Column(
+                children: [
+                  for (final ecgCase in cases) ...[
+                    _RecentCaseTile(
+                      ecgCase: ecgCase,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ResultsScreen(ecgCase: ecgCase),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 28),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Analyses récentes',
+                'Exemples',
                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               ),
               Text(
@@ -173,7 +257,7 @@ class HomeScreen extends StatelessWidget {
     final details = await _askImportDetails(context);
     if (details == null || !context.mounted) return;
 
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => AnalyzingScreen.realImport(
           import: RealEcgImport(
@@ -186,6 +270,10 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
     );
+    // Back on the home screen (from ResultsScreen, which replaced this
+    // route) — refresh so a newly saved analysis shows up without needing
+    // a manual pull-to-refresh or app restart.
+    if (mounted) _loadCases();
   }
 
   void _showImportError(BuildContext context, String message) {

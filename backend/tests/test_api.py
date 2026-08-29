@@ -62,6 +62,43 @@ def test_analyze_does_not_flag_real_normal_recording_as_afib() -> None:
     assert ai_alerts == []
 
 
+def test_analyze_without_lead_i_avf_leaves_axis_null() -> None:
+    sampling_rate = 500
+    signal = nk.ecg_simulate(
+        duration=10, sampling_rate=sampling_rate, heart_rate=75, method="ecgsyn", random_state=42
+    )
+
+    response = client.post(
+        "/analyze", json={"signal": list(signal), "sampling_rate": sampling_rate}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["measurements"]["electrical_axis_deg"] is None
+
+
+def test_analyze_with_lead_i_avf_computes_axis() -> None:
+    sampling_rate = 500
+    signal = nk.ecg_simulate(
+        duration=10, sampling_rate=sampling_rate, heart_rate=75, method="ecgsyn", random_state=42
+    )
+    signal_list = list(signal)
+
+    response = client.post(
+        "/analyze",
+        json={
+            "signal": signal_list,
+            "sampling_rate": sampling_rate,
+            "lead_i": signal_list,
+            "lead_avf": signal_list,
+        },
+    )
+
+    assert response.status_code == 200
+    axis = response.json()["measurements"]["electrical_axis_deg"]
+    assert axis is not None
+    assert abs(axis - 45.0) < 5.0
+
+
 def test_ai_alerts_always_carry_a_confidence_score() -> None:
     """Structural guarantee, not a specific prediction: any AI-sourced
     alert the API ever returns must be scored — never presented with the

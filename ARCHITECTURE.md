@@ -45,7 +45,6 @@ nouveau référentiel est un nouveau profil, pas une réécriture.
 `measure_ecg` ne traite qu'**une seule dérivation** (DII) pour l'instant.
 C'est une simplification délibérée pour le POC, mais elle a un coût réel :
 
-- L'axe électrique reste `None` — il faut au moins 2 dérivations (I, aVF).
 - Une vraie lecture clinique (ischémie, localisation d'un infarctus)
   nécessite les 12 dérivations.
 - La délinéation par dérivation unique est plus bruitée qu'un consensus
@@ -56,6 +55,21 @@ C'est une simplification délibérée pour le POC, mais elle a un coût réel :
 en bricolage.** Quand le format d'entrée réel (SCP-ECG, 12 dérivations)
 sera intégré, `measure_ecg` doit être repensé pour prendre un
 enregistrement multi-dérivations dès la signature de la fonction.
+
+**Exception délibérée, pas une contradiction de ce qui précède** : l'axe
+électrique (`electrical_axis_deg`) peut désormais être calculé —
+`signal_processing.compute_electrical_axis(lead_i, lead_avf,
+sampling_rate)`, méthode hexaxiale standard à deux dérivations
+(`angle = atan2(net_aVF, net_I)`, chaque dérivation délinéée
+indépendamment, amplitude nette approximée par R-peak moins S-peak par
+battement, médiane sur tous les battements). C'est **additif, pas une
+refonte** : `measure_ecg` garde exactement sa signature mono-dérivation
+et son comportement inchangé ; `/analyze` accepte juste deux champs
+optionnels `lead_i`/`lead_avf`, et ne calcule l'axe que si les deux sont
+fournis (sinon `None`, jamais fabriqué). L'app mobile ne collecte pas
+encore d'entrée multi-dérivations — l'axe reste donc `None` de bout en
+bout côté app aujourd'hui, la brique backend est prête mais pas
+branchée.
 
 ## Pourquoi `_robust_interval_ms` utilise la médiane, pas la moyenne
 

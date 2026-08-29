@@ -42,7 +42,7 @@ from cardiolens.logo_storage import (
 )
 from cardiolens.models import AlertSeverity, AlertSource, ClinicalAlert, ECGMeasurements
 from cardiolens.rules import ESC_DEFAULT, evaluate_rules
-from cardiolens.signal_processing import ECGProcessingError, measure_ecg
+from cardiolens.signal_processing import ECGProcessingError, compute_electrical_axis, measure_ecg
 
 # Not tuned beyond the classifier's own balanced-class default (0.5) — see
 # scripts/train_afib_model.py's docstring for why this shouldn't be read as
@@ -207,6 +207,12 @@ class AnalyzeRequest(BaseModel):
     # Streamlit tool, an unauthenticated request) can omit these.
     patient_label: str | None = None
     date_label: str | None = None
+    # Optional: the electrical axis is computed only when BOTH are given —
+    # a single lead (the required `signal` above) cannot yield it. Neither
+    # affects any other measurement; `signal` alone still drives everything
+    # else, unchanged, whether or not these are present.
+    lead_i: list[float] | None = None
+    lead_avf: list[float] | None = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -229,6 +235,16 @@ def analyze(
         measurements = measure_ecg(signal, sampling_rate=request.sampling_rate)
     except ECGProcessingError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if request.lead_i is not None and request.lead_avf is not None:
+        axis_deg = compute_electrical_axis(
+            np.asarray(request.lead_i, dtype=np.float64),
+            np.asarray(request.lead_avf, dtype=np.float64),
+            sampling_rate=request.sampling_rate,
+        )
+        # None (leads too noisy to delineate) is a legitimate outcome, not
+        # an error — the rest of the analysis must not fail because of it.
+        measurements = measurements.model_copy(update={"electrical_axis_deg": axis_deg})
 
     alerts = evaluate_rules(measurements, ESC_DEFAULT, sex=request.sex)
 

@@ -24,8 +24,10 @@ class ECGProcessingError(RuntimeError):
 def measure_ecg(signal: NDArray[np.float64], sampling_rate: int) -> ECGMeasurements:
     """Extract standard measurements from a single-lead ECG signal.
 
-    Electrical axis is left unset here — it requires the frontal-plane leads
-    (I, aVF), not a single lead, and is wired in once multi-lead input lands.
+    Electrical axis is always left unset here — it requires the
+    frontal-plane leads (I, aVF), not a single lead. See
+    compute_electrical_axis(), called separately by the API layer only
+    when both leads are actually provided.
     """
     try:
         cleaned = nk.ecg_clean(signal, sampling_rate=sampling_rate)
@@ -94,6 +96,57 @@ def measure_ecg(signal: NDArray[np.float64], sampling_rate: int) -> ECGMeasureme
         rr_interval_ms=mean_rr_ms,
         rr_variability_pct=rr_variability_pct,
     )
+
+
+def compute_electrical_axis(
+    lead_i: NDArray[np.float64], lead_avf: NDArray[np.float64], sampling_rate: int
+) -> float | None:
+    """Frontal-plane QRS axis from leads I and aVF (the standard two-lead
+    hexaxial method) — angle = atan2(net_aVF, net_I), with lead I at 0° and
+    aVF at +90° by convention.
+
+    Net QRS deflection per beat is approximated as R-peak minus S-peak
+    amplitude (the same simplification used for manual axis estimation) —
+    Q is small enough in most leads for this to be the standard shorthand,
+    not a fabricated shortcut. Returns None (never a fabricated angle) if
+    either lead can't be reliably delineated — same failure posture as the
+    rest of this module."""
+    net_i = _median_net_qrs_amplitude(lead_i, sampling_rate)
+    net_avf = _median_net_qrs_amplitude(lead_avf, sampling_rate)
+    if net_i is None or net_avf is None:
+        return None
+    if net_i == 0.0 and net_avf == 0.0:
+        return None  # atan2(0, 0) is mathematically 0 but physiologically meaningless here
+
+    return float(np.degrees(np.arctan2(net_avf, net_i)))
+
+
+def _median_net_qrs_amplitude(
+    lead: NDArray[np.float64], sampling_rate: int
+) -> float | None:
+    try:
+        cleaned = nk.ecg_clean(lead, sampling_rate=sampling_rate)
+        _, r_info = nk.ecg_peaks(cleaned, sampling_rate=sampling_rate)
+        r_peaks = np.asarray(r_info["ECG_R_Peaks"])
+        if len(r_peaks) < 3:
+            return None
+        _, waves = nk.ecg_delineate(cleaned, r_peaks, sampling_rate=sampling_rate, method="peak")
+    except Exception:  # noqa: BLE001 — neurokit2 raises broad/varied errors on bad signals
+        return None
+
+    s_peaks = np.asarray(waves.get("ECG_S_Peaks", []), dtype=float)
+    n = min(len(r_peaks), len(s_peaks))
+    if n < 3:
+        return None
+
+    valid = ~np.isnan(s_peaks[:n])
+    r_idx = r_peaks[:n][valid].astype(int)
+    s_idx = s_peaks[:n][valid].astype(int)
+    if len(r_idx) < 3:
+        return None
+
+    net_amplitudes = cleaned[r_idx] - cleaned[s_idx]
+    return float(np.median(net_amplitudes))
 
 
 def _robust_interval_ms(

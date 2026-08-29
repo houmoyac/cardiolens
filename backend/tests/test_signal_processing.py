@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from cardiolens.rules import ESC_DEFAULT, evaluate_rules
-from cardiolens.signal_processing import ECGProcessingError, measure_ecg
+from cardiolens.signal_processing import ECGProcessingError, compute_electrical_axis, measure_ecg
 
 SAMPLE_DIR = Path(__file__).parent.parent / "src" / "cardiolens" / "sample_ecgs"
 
@@ -68,3 +68,35 @@ def test_measure_ecg_rejects_too_short_signal() -> None:
 
     with pytest.raises(ECGProcessingError):
         measure_ecg(signal, sampling_rate=sampling_rate)
+
+
+def test_compute_electrical_axis_identical_leads_gives_45_degrees() -> None:
+    """atan2(net, net) = 45° exactly, for any equal, nonzero net — a
+    verifiable sanity check on the angle math and delineation pipeline
+    without needing a real physically-paired lead I/aVF recording."""
+    sampling_rate = 500
+    signal = np.asarray(
+        nk.ecg_simulate(
+            duration=10, sampling_rate=sampling_rate, heart_rate=75, method="ecgsyn",
+            random_state=42,
+        )
+    )
+
+    axis = compute_electrical_axis(signal, signal, sampling_rate=sampling_rate)
+
+    assert axis is not None
+    assert abs(axis - 45.0) < 5.0
+
+
+def test_compute_electrical_axis_returns_none_for_undelineable_lead() -> None:
+    sampling_rate = 500
+    signal = np.asarray(
+        nk.ecg_simulate(
+            duration=10, sampling_rate=sampling_rate, heart_rate=75, method="ecgsyn",
+            random_state=42,
+        )
+    )
+    flat = np.zeros(sampling_rate * 10)
+
+    assert compute_electrical_axis(signal, flat, sampling_rate=sampling_rate) is None
+    assert compute_electrical_axis(flat, flat, sampling_rate=sampling_rate) is None

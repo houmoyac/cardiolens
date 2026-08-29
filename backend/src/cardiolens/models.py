@@ -48,4 +48,7 @@ class ECGMeasurements(BaseModel):
     signal for rhythm irregularity, not a diagnosis of any specific
     arrhythmia."""
     electrical_axis_deg: float | None = None
-    """None until multi-lead (I, aVF) input is wired in — never fabricate 0°."""
+    """None unless the caller supplied both lead I and aVF (see
+    signal_processing.compute_electrical_axis) — the mobile app doesn't
+    collect multi-lead input yet, so this stays null end-to-end there
+    today; never fabricate 0° in its place."""

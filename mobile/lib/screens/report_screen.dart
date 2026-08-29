@@ -1,15 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:printing/printing.dart';
 
 import '../models/ecg_result.dart';
 import '../services/auth_service.dart';
+import '../services/pdf_report.dart';
 import '../theme.dart';
 import '../widgets/ecg_metadata_bar.dart';
 import '../widgets/ecg_trace_painter.dart';
 
-class ReportScreen extends StatelessWidget {
+class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key, required this.ecgCase});
 
   final EcgCase ecgCase;
+
+  @override
+  State<ReportScreen> createState() => _ReportScreenState();
+}
+
+class _ReportScreenState extends State<ReportScreen> {
+  bool _isExporting = false;
+
+  EcgCase get ecgCase => widget.ecgCase;
 
   @override
   Widget build(BuildContext context) {
@@ -156,15 +167,24 @@ class ReportScreen extends StatelessWidget {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => _showTodoSnack(context),
-                  icon: const Icon(Icons.download_outlined, size: 18),
+                  onPressed: _isExporting ? null : () => _exportPdf(context),
+                  icon: _isExporting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.download_outlined, size: 18),
                   label: const Text('Télécharger PDF'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => _showTodoSnack(context),
+                  onPressed: _isExporting ? null : () => _exportPdf(context),
                   icon: const Icon(Icons.share_outlined, size: 18),
                   label: const Text('Partager'),
                 ),
@@ -185,10 +205,24 @@ class ReportScreen extends StatelessWidget {
     return '${doctor.displayName} — en attente de validation';
   }
 
-  void _showTodoSnack(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Export PDF pas encore implémenté.")),
-    );
+  /// Generates the report PDF and hands it to the OS share sheet — on
+  /// mobile there's no separate "save to device" action without extra
+  /// storage-permission plumbing, so "Télécharger" and "Partager" both go
+  /// through the share sheet (Save to Files is one of its options).
+  Future<void> _exportPdf(BuildContext context) async {
+    setState(() => _isExporting = true);
+    try {
+      final bytes = await buildReportPdf(ecgCase);
+      if (!context.mounted) return;
+      await Printing.sharePdf(bytes: bytes, filename: reportPdfFilename(ecgCase));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Export PDF impossible : $e')));
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
   }
 }
 

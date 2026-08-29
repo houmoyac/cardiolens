@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
 
 import 'api_client.dart';
 import 'api_config.dart';
@@ -155,4 +157,21 @@ class AuthService {
   String? get logoUrl => (currentUser?.hasLogo ?? false) ? '$apiBaseUrl/auth/me/logo' : null;
 
   Map<String, String> get authHeaders => _token == null ? {} : {'Authorization': 'Bearer $_token'};
+
+  /// Used by PDF export, which needs raw bytes rather than something an
+  /// Image.network widget can stream — returns null on any failure (missing
+  /// logo, unreachable server) so a PDF can still be built without one.
+  Future<Uint8List?> fetchLogoBytes() async {
+    final url = logoUrl;
+    if (url == null) return null;
+    try {
+      final response = await http
+          .get(Uri.parse(url), headers: authHeaders)
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) return null;
+      return response.bodyBytes;
+    } catch (_) {
+      return null;
+    }
+  }
 }

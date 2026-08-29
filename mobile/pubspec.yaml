@@ -38,6 +38,8 @@ dependencies:
   http: ^1.6.0
   flutter_secure_storage: ^9.2.4
   file_picker: ^11.0.3
+  pdf: ^3.13.0
+  printing: ^5.15.0
 
 dev_dependencies:
   flutter_test:

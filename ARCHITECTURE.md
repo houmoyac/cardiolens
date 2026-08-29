@@ -212,10 +212,46 @@ construit d'un bloc :
     silencieusement rien. Voir le test de non-régression dans
     `test_image_digitization.py` pour le placement exact qui marche et
     celui qui ne marche pas.
-11. **Pas encore fait** : la robustesse au bruit d'une vraie photo prise
-    au téléphone (éclairage variable, papier froissé, document qui ne se
-    détache pas clairement de son arrière-plan) — toujours jamais testée
-    sur une vraie photo, synthétique et jeux de recherche seulement.
+11. **Premier vrai test sur du papier froissé** (`ecg-image-kit`,
+    BSD-3, image `SampleData/DistortionData/Wrinkles_Creases/`) — pas
+    une photo de patient, un jeu de distorsions généré exprès pour ce
+    genre de test. Deux vrais bugs trouvés, avec preuve chiffrée, pas
+    une impression :
+    - **`segment_grid_panels` peut mal placer les panneaux à cause des
+      ombres de plis.** La frontière de rangée est censée éviter le
+      "moins encré" dans une marge autour de la position naïve — mais
+      une ombre de pli, très sombre, attire cette recherche vers elle
+      plutôt que vers le vrai espace entre panneaux. Vérifié
+      concrètement : sur cette image, la frontière naïve a une somme
+      d'encre de 266 400-443 271 ; la frontière "raffinée" choisie
+      atterrit à 129 758-198 141 — nettement moins, mais au mauvais
+      endroit. Résultat visible : le tracé de la dérivation I n'apparaît
+      pas dans le panneau qui devrait le contenir, mais dans celui
+      juste en dessous (frontière décalée, pas de perte de données —
+      juste mal rangées). Confirmé par contraste : sur une image du
+      même jeu **sans pli** mais avec la disposition qui correspond
+      vraiment à `rows`/`cols` passés, la segmentation retrouve le tracé
+      parfaitement.
+    - **Le seuil de noirceur fixe (`dark_threshold=128`) n'est pas
+      universel.** Sur cette image (contraste faible, tracé fin entre
+      les complexes QRS), ce seuil ne récupère que 325/603 colonnes ;
+      190 en récupère 471/603 ; 210 en récupère moins (231/603, les
+      ombres de plis commencent à être prises pour de l'encre). Même
+      leçon que `detect_grid_color` a déjà forcé à apprendre pour la
+      couleur de grille : une constante supposée universelle ne l'est
+      pas sur une vraie image, celle-ci a juste échappé au premier test.
+
+    **Pas corrigé maintenant, volontairement** — un seuil adaptatif ou
+    une détection de frontière robuste aux plis sont de vrais chantiers
+    à part entière, pas un ajustement d'une ligne ; les retenter sans
+    validation soignée referait exactement l'erreur du premier correctif
+    d'étiquette (retiré ci-dessus) : un changement qui a l'air d'une
+    amélioration mais casse autre chose ailleurs.
+12. **Pas encore fait** : le reste de la robustesse au bruit d'une vraie
+    photo prise au téléphone (document qui ne se détache pas clairement
+    de son arrière-plan, cadrage/perspective sur une vraie photo plutôt
+    que la simulation synthétique déjà validée) — et une vraie photo
+    d'un médecin, jamais reçue à ce jour.
 
 **Hypothèses fortes à garder en tête** — la grille est supposée carrée
 (même espacement horizontal/vertical) et sa couleur doit être connue

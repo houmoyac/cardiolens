@@ -262,6 +262,29 @@ construit d'un bloc :
     seule image réelle serait un réglage déguisé en méthode, pas une
     vraie solution — retenu comme non fait plutôt que comme un correctif
     qui semble marcher mais généralise mal.
+
+    **Vérifié ensuite sur 3 images réelles de plus** (même dataset,
+    distorsions différentes : bruit capteur + teinte colorée, grain
+    fort, plis + grille magenta) — précisément pour savoir si 190
+    aurait été un bon choix général ou un réglage sur mesure pour une
+    seule image. Réponse nette, chiffrée :
+
+    | image           | 110 | 128 (actuel) | 150 | 170 | 190  | 210 |
+    |-----------------|-----|--------------|-----|-----|------|-----|
+    | wrinkle         | 319 | 325          | 380 | 408 | **471** | 231 |
+    | raw2            | 575 | 575          | 575 | 575 | 574  | **0**   |
+    | raw3            | 470 | 469          | **0**   | 0   | 0    | 0   |
+    | wrinkle3        | 374 | 478          | **586** | 429 | 218  | 177 |
+
+    Si 190 avait été livré comme "amélioration", ça aurait **cassé
+    entièrement** raw3 (0/470, plus aucune colonne détectée) et
+    sérieusement dégradé wrinkle3 (218 contre 478). La valeur actuelle,
+    128, est en fait **la plus robuste des six testées sur ces quatre
+    images** — jamais optimale, mais jamais catastrophique non plus,
+    contrairement à toutes les autres valeurs essayées. Confirme, avec
+    des données plutôt qu'une intuition, que garder 128 était la bonne
+    décision et qu'un vrai seuil adaptatif fiable demanderait un
+    jeu de validation bien plus large que 4 images.
 12. **Pas encore fait** : le reste de la robustesse au bruit d'une vraie
     photo prise au téléphone (document qui ne se détache pas clairement
     de son arrière-plan, cadrage/perspective sur une vraie photo plutôt

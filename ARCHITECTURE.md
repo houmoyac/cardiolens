@@ -317,6 +317,36 @@ construit d'un bloc :
     varie *par image* plutôt qu'une seule constante, mais ça reste un
     chantier séparé (la tentative Otsu/adaptative plus haut n'a pas
     mieux fait qu'une valeur fixe).
+
+    **Correctif réel, cette fois, sur les frontières de panneaux —
+    partiel, pas une résolution complète.** `_refine_grid_boundaries`
+    filtre maintenant le profil d'encre en passe-haut avant de chercher
+    la ligne la moins encrée (soustraction d'une version fortement
+    lissée, fenêtre = 2× la marge de recherche — testé empiriquement :
+    une fenêtre trop petite ne change rien, une fenêtre trop grande non
+    plus, voir l'historique git). Objectif : que l'ombre d'un pli (un
+    dégradé lent et large) n'attire plus la recherche vers elle, en ne
+    gardant que les creux nets (le vrai espace entre panneaux, ou le
+    tracé/la grille). Vérifié : ne casse aucun test existant (page
+    synthétique propre, tests synthétiques d'extraction) ; sur l'image
+    réelle plissée, déplace la frontière dans le bon sens (363 → 466,
+    contre une vraie position estimée autour de 600+ d'après
+    l'inspection visuelle).
+
+    **Mais ça ne résout pas tout, vérifié pas supposé** : sur cette
+    même image, le tracé de la dérivation I reste dans le panneau du
+    dessous même après le correctif — parce qu'une vraie page scannée
+    complète a souvent un bandeau d'en-tête (infos patient, texte
+    manuscrit) que l'hypothèse "division égale en rangées" ignore
+    totalement. C'est un problème différent et plus profond que celui
+    visé par ce correctif, découvert en le testant plutôt que corrigé
+    par accident. Pas de test de régression synthétique ajouté pour ce
+    correctif précis : plusieurs tentatives pour reproduire l'échec
+    réel avec un dégradé synthétique n'ont pas réussi à recréer un écart
+    assez grand pour que ça compte (la vraie image avait une ombre plus
+    marquée et un tracé positionné près du bord de son panneau, pas au
+    centre) — documenté honnêtement plutôt que de garder un faux test
+    qui ne prouve rien.
 12. **Pas encore fait** : le reste de la robustesse au bruit d'une vraie
     photo prise au téléphone (document qui ne se détache pas clairement
     de son arrière-plan, cadrage/perspective sur une vraie photo plutôt

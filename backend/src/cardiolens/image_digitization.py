@@ -5,6 +5,7 @@ import numpy as np
 import pytesseract
 from numpy.typing import NDArray
 from PIL import Image
+from scipy.ndimage import uniform_filter1d
 from scipy.signal import find_peaks
 
 # First increment of ECG image digitization — see ARCHITECTURE.md. This
@@ -323,6 +324,19 @@ def segment_grid_panels(
     naive position, for the row/column with the least ink — the real gap
     between panels. Still assumes a clean, axis-aligned page: no
     perspective correction happens here.
+
+    The "least ink" search is high-pass filtered first (see
+    `_refine_grid_boundaries`) — found necessary on a real wrinkled
+    photo, where a wrinkle's shadow (a slow, broad gradient) pulled the
+    naive raw-ink search toward itself instead of the real gap. Verified
+    to shift the boundary in the right direction on that real image
+    (see ARCHITECTURE.md for the before/after numbers) and to not
+    regress any existing test, including on a clean multi-panel page.
+    **Not a full fix**, stated plainly: on that same real image, the
+    corrected boundary still didn't fully realign the panel, because
+    real full-page scans commonly include a header/patient-info margin
+    that "naive equal division into rows" doesn't account for at all —
+    a distinct, deeper issue than the shadow this change addresses.
     """
     if image.ndim == 3:
         gray = np.asarray(Image.fromarray(image).convert("L"), dtype=np.float64)
@@ -348,11 +362,29 @@ def _refine_grid_boundaries(
     n = len(profile)
     naive = [round(i * n / count) for i in range(count + 1)]
 
+    # High-pass the ink profile before searching for the least-inked line:
+    # a real panel gap is a SHARP, narrow dip, but a photographed page's
+    # wrinkle/lighting gradients are slow, wide swings that can otherwise
+    # dominate the raw ink sum and pull the "least ink" search toward a
+    # shadow instead of the real gap (found on a real wrinkled photo, not
+    # hypothetical — see ARCHITECTURE.md). Subtracting a heavily smoothed
+    # copy of the profile removes slow gradients while leaving sharp
+    # local dips (and the true trace/grid content) intact.
+    margin = max(1, int(n / count * search_margin_frac))
+    # Sized relative to the search margin, not the panel size: too small
+    # and the smoothed baseline still tracks the sharp dip we want to
+    # keep (no effective high-pass at all); too large (tried n // count
+    # first) and it tracks the whole search window just as closely,
+    # which is equally a no-op — found empirically, not assumed, by
+    # sweeping window sizes against the real wrinkled test image in
+    # ARCHITECTURE.md.
+    smoothed = uniform_filter1d(profile, size=max(3, margin * 2), mode="nearest")
+    highpassed = profile - smoothed
+
     refined = [naive[0]]
     for i in range(1, count):
-        margin = max(1, int(n / count * search_margin_frac))
         lo, hi = max(0, naive[i] - margin), min(n, naive[i] + margin)
-        window = profile[lo:hi]
+        window = highpassed[lo:hi]
         refined.append(lo + int(np.argmin(window)))
     refined.append(naive[-1])
 
